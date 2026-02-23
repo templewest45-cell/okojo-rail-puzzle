@@ -93,6 +93,8 @@ const State = {
     trailPath: null,
     step1TotalRounds: 1,
     step1CurrentRound: 0,
+    railLength: 2,
+    railDirection: 'random',
 };
 
 // --- DOM Elements ---
@@ -136,6 +138,24 @@ function init() {
         });
     });
 
+    // レールの長さボタン
+    document.querySelectorAll('.length-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.length-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            State.railLength = parseInt(btn.dataset.length);
+        });
+    });
+
+    // レールの向きボタン
+    document.querySelectorAll('.dir-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.dir-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            State.railDirection = btn.dataset.dir;
+        });
+    });
+
     // 設定モーダル開閉
     btnSettings.addEventListener('click', () => {
         initAudio();
@@ -176,14 +196,12 @@ function init() {
     btnBackTop.addEventListener('click', () => {
         clearOverlay.classList.add('hidden');
         clearCanvas();
-        svg.removeEventListener('pointerdown', startSvgDraw);
         showScreen('screen-top');
     });
 
     btnHome.addEventListener('click', () => {
         clearOverlay.classList.add('hidden');
         clearCanvas();
-        svg.removeEventListener('pointerdown', startSvgDraw);
         showScreen('screen-top');
     });
 
@@ -207,7 +225,52 @@ function clearCanvas() {
     layerRails.innerHTML = '';
     layerActive.innerHTML = '';
     layerTrain.innerHTML = '';
-    svg.removeEventListener('pointerdown', startSvgDraw);
+    // SVGの表示領域をデフォルトにリセット
+    svg.setAttribute('viewBox', '0 0 800 600');
+}
+
+// パスのサイズに合わせて画面（viewBox）をズームアウト・センタリングする
+function adjustViewBoxToFitPath(pathNode) {
+    const defaultW = 800;
+    const defaultH = 600;
+    const padding = 150; // 駅や電車が見切れないための余白
+
+    const bbox = pathNode.getBBox();
+    const pathMinX = bbox.x - padding;
+    const pathMaxX = bbox.x + bbox.width + padding;
+    const pathMinY = bbox.y - padding;
+    const pathMaxY = bbox.y + bbox.height + padding;
+
+    let minX = 0, minY = 0, width = defaultW, height = defaultH;
+
+    // パスがデフォルト領域より大きいか、はみ出している場合は広げる
+    if (pathMinX < 0 || pathMaxX > defaultW || pathMinY < 0 || pathMaxY > defaultH) {
+        minX = Math.min(0, pathMinX);
+        const maxX = Math.max(defaultW, pathMaxX);
+        minY = Math.min(0, pathMinY);
+        const maxY = Math.max(defaultH, pathMaxY);
+
+        width = maxX - minX;
+        height = maxY - minY;
+
+        // アスペクト比（4:3）を維持してレイアウト崩れを防ぐ
+        const targetRatio = defaultW / defaultH;
+        const currentRatio = width / height;
+
+        if (currentRatio > targetRatio) {
+            // 横長すぎる場合は縦を伸ばす
+            const newHeight = width / targetRatio;
+            minY -= (newHeight - height) / 2;
+            height = newHeight;
+        } else {
+            // 縦長すぎる場合は横を伸ばす
+            const newWidth = height * targetRatio;
+            minX -= (newWidth - width) / 2;
+            width = newWidth;
+        }
+    }
+
+    svg.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`);
 }
 
 function loadStep(stepNumber) {
@@ -249,19 +312,7 @@ function drawBackground() {
     }
     bgLayer.innerHTML = '';
 
-    // 空（うす水色）
-    const sky = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    sky.setAttribute('x', '0'); sky.setAttribute('y', '0');
-    sky.setAttribute('width', '100%'); sky.setAttribute('height', '130');
-    sky.setAttribute('fill', '#e1f5fe');
-    bgLayer.appendChild(sky);
-
-    // 地面（うす緑）
-    const ground = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    ground.setAttribute('x', '0'); ground.setAttribute('y', '130');
-    ground.setAttribute('width', '100%'); ground.setAttribute('height', '100%');
-    ground.setAttribute('fill', '#f1f8e9');
-    bgLayer.appendChild(ground);
+    // 空と地面の描画は削除（CSSの背景色 #f1f8e9 に全体を任せる）
 
     // 遠景の家
     const house = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -453,6 +504,8 @@ function drawTrain(x, y) {
     return g;
 }
 
+
+
 function setupTrainDrag(node) {
     node.addEventListener('pointerdown', e => {
         if (State.isStepCompleted || State.waitingForTap) return;
@@ -470,19 +523,39 @@ function setupTrainDrag(node) {
 // ============================
 // ステップ1：直線をなぞる（ランダム次から方向発進）
 // ============================
-const STEP1_PATTERNS = [
-    { path: "M 100,300 L 700,300", label: "左から右" },
-    { path: "M 700,300 L 100,300", label: "右から左" },
-    { path: "M 400,100 L 400,500", label: "上から下" },
-    { path: "M 400,500 L 400,100", label: "下から上" },
-    { path: "M 100,450 L 700,150", label: "左下から右上" },
-    { path: "M 700,150 L 100,450", label: "右上から左下" },
-];
+function generateStep1Path() {
+    const len = State.railLength * 200; // 1: 200, 2: 400, 3: 600
+    const center = { x: 400, y: 300 };
+
+    let dir = State.railDirection;
+    if (dir === 'random') {
+        const dirs = ['right', 'left', 'up', 'down', 'up-right', 'down-right', 'up-left', 'down-left'];
+        dir = dirs[Math.floor(Math.random() * dirs.length)];
+    }
+
+    let angle = 0;
+    switch (dir) {
+        case 'right': angle = 0; break;
+        case 'left': angle = Math.PI; break;
+        case 'down': angle = Math.PI / 2; break;
+        case 'up': angle = -Math.PI / 2; break;
+        case 'up-right': angle = -Math.PI / 4; break;
+        case 'down-right': angle = Math.PI / 4; break;
+        case 'up-left': angle = -Math.PI * 3 / 4; break;
+        case 'down-left': angle = Math.PI * 3 / 4; break;
+    }
+
+    const startX = center.x - (len / 2) * Math.cos(angle);
+    const startY = center.y - (len / 2) * Math.sin(angle);
+    const endX = center.x + (len / 2) * Math.cos(angle);
+    const endY = center.y + (len / 2) * Math.sin(angle);
+
+    return `M ${startX},${startY} L ${endX},${endY}`;
+}
 
 function initStep1() {
-    // 毎回ランダムにパターンを選ぶ
-    const pattern = STEP1_PATTERNS[Math.floor(Math.random() * STEP1_PATTERNS.length)];
-    const pathData = pattern.path;
+    // 設定値に基づいて動的パスを生成
+    const pathData = generateStep1Path();
 
     setOkojoText('でんしゃ を さわって、えき まで はこんでね！');
     State.currentPathNode = createRailPath(pathData);
@@ -496,12 +569,93 @@ function initStep1() {
     drawStation(startPoint.x, startPoint.y);
     drawStation(endPoint.x, endPoint.y);
 
+    // 見切れ防止: レール全体が収まるようSVG領域を調整
+    adjustViewBoxToFitPath(State.currentPathNode);
+
     State.trainNode = drawTrain(startPoint.x, startPoint.y);
     setupTrainDrag(State.trainNode);
 }
 
 // ============================
-// ステップ2：かどに気づく（ランダム）
+// ステップ2：曲線をなぞる（ランダム）
+// ============================
+function generateStep2Path() {
+    const len = State.railLength * 200;
+    const center = { x: 400, y: 300 };
+
+    let dir = State.railDirection;
+    if (dir === 'random') {
+        const dirs = ['right', 'left', 'up', 'down', 'up-right', 'down-right', 'up-left', 'down-left'];
+        dir = dirs[Math.floor(Math.random() * dirs.length)];
+    }
+
+    let angle = 0;
+    switch (dir) {
+        case 'right': angle = 0; break;
+        case 'left': angle = Math.PI; break;
+        case 'down': angle = Math.PI / 2; break;
+        case 'up': angle = -Math.PI / 2; break;
+        case 'up-right': angle = -Math.PI / 4; break;
+        case 'down-right': angle = Math.PI / 4; break;
+        case 'up-left': angle = -Math.PI * 3 / 4; break;
+        case 'down-left': angle = Math.PI * 3 / 4; break;
+    }
+
+    const startX = center.x - (len / 2) * Math.cos(angle);
+    const startY = center.y - (len / 2) * Math.sin(angle);
+    const endX = center.x + (len / 2) * Math.cos(angle);
+    const endY = center.y + (len / 2) * Math.sin(angle);
+
+    // 0: アーチ(Q), 1: S字(C), 2: 同方向カーブ(C)
+    const curveType = Math.floor(Math.random() * 3);
+    const perpAngle = angle + Math.PI / 2;
+    // 膨らみ具合（長さ設定に応じて少し調整）
+    const curveAmount = (100 + State.railLength * 25) * (Math.random() > 0.5 ? 1 : -1);
+
+    if (curveType === 0) {
+        const cx = center.x + curveAmount * Math.cos(perpAngle);
+        const cy = center.y + curveAmount * Math.sin(perpAngle);
+        return `M ${startX},${startY} Q ${cx},${cy} ${endX},${endY}`;
+    } else {
+        const d = len / 3;
+        const c1x = startX + d * Math.cos(angle) + curveAmount * Math.cos(perpAngle);
+        const c1y = startY + d * Math.sin(angle) + curveAmount * Math.sin(perpAngle);
+
+        let c2CurveAmount = curveAmount;
+        if (curveType === 1) c2CurveAmount = -curveAmount; // S字の場合は逆側へ
+
+        const c2x = endX - d * Math.cos(angle) + c2CurveAmount * Math.cos(perpAngle);
+        const c2y = endY - d * Math.sin(angle) + c2CurveAmount * Math.sin(perpAngle);
+
+        return `M ${startX},${startY} C ${c1x},${c1y} ${c2x},${c2y} ${endX},${endY}`;
+    }
+}
+
+function initStep2() {
+    setOkojoText('くねくねレール だよ！ えき まで はこんでね！');
+    const pathData = generateStep2Path();
+
+    State.currentPathNode = createRailPath(pathData);
+    State.pathLength = State.currentPathNode.getTotalLength();
+    State.stops = []; // 曲線は止まらず一気に進める
+
+    // 軌跡パス
+    State.trailPath = createTrailPath(pathData, State.pathLength);
+
+    const startPoint = State.currentPathNode.getPointAtLength(0);
+    const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
+    drawStation(startPoint.x, startPoint.y);
+    drawStation(endPoint.x, endPoint.y);
+
+    // 見切れ防止処理
+    adjustViewBoxToFitPath(State.currentPathNode);
+
+    State.trainNode = drawTrain(startPoint.x, startPoint.y);
+    setupTrainDrag(State.trainNode);
+}
+
+// ============================
+// ステップ3：かどに気づく（元ステップ2、ランダム）
 // ============================
 
 // 直線座標列からSVGパスと停止点を自動計算するヘルパー
@@ -516,28 +670,78 @@ function buildLinePath(points) {
     return { d, stops };
 }
 
-const STEP2_PATTERNS = [
-    // L字 縦先→横 4方向
-    { pts: [[150, 450], [150, 150], [650, 150]] },
-    { pts: [[650, 450], [650, 150], [150, 150]] },
-    { pts: [[150, 150], [150, 450], [650, 450]] },
-    { pts: [[650, 150], [650, 450], [150, 450]] },
-    // L字 横先→縦 4方向
-    { pts: [[150, 150], [650, 150], [650, 450]] },
-    { pts: [[650, 150], [150, 150], [150, 450]] },
-    { pts: [[150, 450], [650, 450], [650, 150]] },
-    { pts: [[650, 450], [150, 450], [150, 150]] },
-    // Z字（2コーナー）4方向
-    { pts: [[150, 200], [430, 200], [370, 400], [650, 400]] },
-    { pts: [[650, 400], [370, 400], [430, 200], [150, 200]] },
-    { pts: [[150, 400], [430, 400], [370, 200], [650, 200]] },
-    { pts: [[650, 200], [370, 200], [430, 400], [150, 400]] },
-];
+function generateStep3Path() {
+    const len = State.railLength * 200;
+    const center = { x: 400, y: 300 };
 
-function initStep2() {
+    let dir = State.railDirection;
+    if (dir === 'random') {
+        const dirs = ['right', 'left', 'up', 'down'];
+        dir = dirs[Math.floor(Math.random() * dirs.length)];
+    }
+
+    const w = len * 0.8;
+    const h = len * 0.6;
+
+    const xMin = center.x - w / 2;
+    const xMax = center.x + w / 2;
+    const yMin = center.y - h / 2;
+    const yMax = center.y + h / 2;
+
+    // 長さが2以上のときだけZ字も許可
+    const isZShape = Math.random() > 0.5 && State.railLength >= 2;
+
+    let start, corner, end, c1, c2;
+
+    if (!isZShape) {
+        if (dir === 'right') {
+            start = [xMin, Math.random() > 0.5 ? yMin : yMax];
+            end = [xMax, start[1] === yMin ? yMax : yMin];
+            corner = Math.random() > 0.5 ? [start[0], end[1]] : [end[0], start[1]];
+        } else if (dir === 'left') {
+            start = [xMax, Math.random() > 0.5 ? yMin : yMax];
+            end = [xMin, start[1] === yMin ? yMax : yMin];
+            corner = Math.random() > 0.5 ? [start[0], end[1]] : [end[0], start[1]];
+        } else if (dir === 'down') {
+            start = [Math.random() > 0.5 ? xMin : xMax, yMin];
+            end = [start[0] === xMin ? xMax : xMin, yMax];
+            corner = Math.random() > 0.5 ? [end[0], start[1]] : [start[0], end[1]];
+        } else { // 'up'
+            start = [Math.random() > 0.5 ? xMin : xMax, yMax];
+            end = [start[0] === xMin ? xMax : xMin, yMin];
+            corner = Math.random() > 0.5 ? [end[0], start[1]] : [start[0], end[1]];
+        }
+        return [start, corner, end];
+    } else {
+        if (dir === 'right') {
+            start = [xMin, Math.random() > 0.5 ? yMin : yMax];
+            end = [xMax, start[1] === yMin ? yMax : yMin];
+            c1 = [center.x, start[1]];
+            c2 = [center.x, end[1]];
+        } else if (dir === 'left') {
+            start = [xMax, Math.random() > 0.5 ? yMin : yMax];
+            end = [xMin, start[1] === yMin ? yMax : yMin];
+            c1 = [center.x, start[1]];
+            c2 = [center.x, end[1]];
+        } else if (dir === 'down') {
+            start = [Math.random() > 0.5 ? xMin : xMax, yMin];
+            end = [start[0] === xMin ? xMax : xMin, yMax];
+            c1 = [start[0], center.y];
+            c2 = [end[0], center.y];
+        } else { // 'up'
+            start = [Math.random() > 0.5 ? xMin : xMax, yMax];
+            end = [start[0] === xMin ? xMax : xMin, yMin];
+            c1 = [start[0], center.y];
+            c2 = [end[0], center.y];
+        }
+        return [start, c1, c2, end];
+    }
+}
+
+function initStep3() {
     setOkojoText('「かど」が あるよ！ とちゅうで すこし まってね！');
-    const pattern = STEP2_PATTERNS[Math.floor(Math.random() * STEP2_PATTERNS.length)];
-    const { d: pathData, stops } = buildLinePath(pattern.pts);
+    const pts = generateStep3Path();
+    const { d: pathData, stops } = buildLinePath(pts);
     State.currentPathNode = createRailPath(pathData);
     State.pathLength = State.currentPathNode.getTotalLength();
     State.stops = stops;
@@ -546,90 +750,14 @@ function initStep2() {
     const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
     drawStation(startPoint.x, startPoint.y);
     drawStation(endPoint.x, endPoint.y);
+
+    // 見切れ防止処理
+    adjustViewBoxToFitPath(State.currentPathNode);
+
     State.trainNode = drawTrain(startPoint.x, startPoint.y);
     setupTrainDrag(State.trainNode);
 }
 
-// ============================
-// ステップ3：せんろをつくる（ランダム）
-// ============================
-const STEP3_PATTERNS = [
-    // 長方形ループ（元）
-    [{ x: 200, y: 200 }, { x: 600, y: 200 }, { x: 600, y: 450 }, { x: 200, y: 450 }, { x: 200, y: 200 }],
-    // L字 3駅 4方向
-    [{ x: 200, y: 450 }, { x: 200, y: 200 }, { x: 600, y: 200 }],
-    [{ x: 600, y: 450 }, { x: 600, y: 200 }, { x: 200, y: 200 }],
-    [{ x: 200, y: 200 }, { x: 600, y: 200 }, { x: 600, y: 450 }],
-    [{ x: 600, y: 200 }, { x: 200, y: 200 }, { x: 200, y: 450 }],
-    // Z字 4駅 2方向
-    [{ x: 150, y: 450 }, { x: 400, y: 450 }, { x: 400, y: 200 }, { x: 650, y: 200 }],
-    [{ x: 150, y: 200 }, { x: 400, y: 200 }, { x: 400, y: 450 }, { x: 650, y: 450 }],
-    // U字（コの字）4駅 2方向
-    [{ x: 200, y: 200 }, { x: 200, y: 450 }, { x: 600, y: 450 }, { x: 600, y: 200 }],
-    [{ x: 200, y: 450 }, { x: 200, y: 200 }, { x: 600, y: 200 }, { x: 600, y: 450 }],
-    // W字（山形）5駅
-    [{ x: 150, y: 450 }, { x: 300, y: 200 }, { x: 400, y: 350 }, { x: 500, y: 200 }, { x: 650, y: 450 }],
-];
-
-function initStep3() {
-    setOkojoText('ピカピカの えき から じゅんばんに なぞって、せんろ を つくろう！');
-    State.stations3 = STEP3_PATTERNS[Math.floor(Math.random() * STEP3_PATTERNS.length)];
-    State.currentStationIndex3 = 0;
-
-    const hintPath = `M ${State.stations3[0].x},${State.stations3[0].y} ` +
-        State.stations3.slice(1).map(p => `L ${p.x},${p.y}`).join(' ');
-    const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    outline.setAttribute('d', hintPath);
-    outline.setAttribute('fill', 'none');
-    outline.setAttribute('stroke', 'rgba(0,0,0,0.1)');
-    outline.setAttribute('stroke-width', '24');
-    outline.setAttribute('stroke-linecap', 'round');
-    outline.setAttribute('stroke-dasharray', '10 10');
-    layerRails.appendChild(outline);
-
-    // ループの場合は最後の点（=先頭と同じ）をスキップ、それ以外は全駅描画
-    const isLoop = State.stations3[0].x === State.stations3[State.stations3.length - 1].x &&
-        State.stations3[0].y === State.stations3[State.stations3.length - 1].y;
-    State.stations3.forEach((p, i) => {
-        if (isLoop && i === State.stations3.length - 1) return;
-        drawStation(p.x, p.y);
-    });
-    updateStep3Indicator();
-    svg.addEventListener('pointerdown', startSvgDraw);
-}
-
-function updateStep3Indicator() {
-    layerActive.innerHTML = '';
-    if (State.currentStationIndex3 < State.stations3.length - 1) {
-        const p = State.stations3[State.currentStationIndex3];
-        const indicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        indicator.setAttribute('cx', p.x);
-        indicator.setAttribute('cy', p.y);
-        indicator.setAttribute('class', 'corner-indicator');
-        indicator.setAttribute('style', 'pointer-events: none;');
-        layerActive.appendChild(indicator);
-    }
-}
-
-function startSvgDraw(e) {
-    if (State.step !== 3 || State.isStepCompleted) return;
-    initAudio();
-    const pt = getSVGPoint(e);
-    const startP = State.stations3[State.currentStationIndex3];
-    if (Math.hypot(pt.x - startP.x, pt.y - startP.y) < 50) {
-        State.isDragging = true;
-        State.dragType = 'line';
-        svg.setPointerCapture(e.pointerId);
-        State.drawingLineNode = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        State.drawingLineNode.setAttribute('x1', startP.x);
-        State.drawingLineNode.setAttribute('y1', startP.y);
-        State.drawingLineNode.setAttribute('x2', pt.x);
-        State.drawingLineNode.setAttribute('y2', pt.y);
-        State.drawingLineNode.setAttribute('class', 'rail-path');
-        State.drawingLineNode.setAttribute('stroke', 'var(--accent-color)');
-        layerRails.appendChild(State.drawingLineNode);
-    }
-}
 
 // ============================
 // ステップ4/5 共通：形状バリアント定義
@@ -923,34 +1051,6 @@ function onPointerMove(e) {
             finishStep();
         }
     }
-    // Line Drawing
-    else if (State.dragType === 'line') {
-        const targetP = State.stations3[State.currentStationIndex3 + 1];
-        const distToTarget = Math.hypot(pt.x - targetP.x, pt.y - targetP.y);
-        let endX = distToTarget < 60 ? targetP.x : pt.x;
-        let endY = distToTarget < 60 ? targetP.y : pt.y;
-        State.drawingLineNode.setAttribute('x2', endX);
-        State.drawingLineNode.setAttribute('y2', endY);
-
-        if (distToTarget < 60) {
-            playSound('snap');
-            State.isDragging = false;
-
-            const x1 = State.drawingLineNode.getAttribute('x1');
-            const y1 = State.drawingLineNode.getAttribute('y1');
-            layerRails.removeChild(State.drawingLineNode);
-
-            // 新しい2本線＆背景透過の統一スタイルで描画し直す
-            createRailPath(`M ${x1},${y1} L ${endX},${endY}`);
-            State.drawingLineNode = null;
-            State.currentStationIndex3++;
-            if (State.currentStationIndex3 < State.stations3.length - 1) {
-                updateStep3Indicator();
-            } else {
-                finishStep("せんろ が かんせい したよ！ すごい！", true);
-            }
-        }
-    }
     // Shape Move
     else if (State.dragType === 'shape_move' && State.draggedShape) {
         let newX = pt.x + State.dragOffset.x;
@@ -1087,27 +1187,6 @@ function finishStep(customMsg = 'やったね！えきに ついたよ！', play
     playSound('success');
     setOkojoText(customMsg);
 
-    if (playTrainAnim && State.step === 3) {
-        layerActive.innerHTML = '';
-        const pathData = `M ${State.stations3[0].x},${State.stations3[0].y} ` +
-            State.stations3.slice(1).map(p => `L ${p.x},${p.y}`).join(' ');
-        const invisiblePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        invisiblePath.setAttribute('d', pathData); invisiblePath.setAttribute('fill', 'none');
-        layerRails.appendChild(invisiblePath);
-        const train = drawTrain(State.stations3[0].x, State.stations3[0].y);
-        const totalLen = invisiblePath.getTotalLength();
-        let startTime = null;
-        function animate(time) {
-            if (!startTime) startTime = time;
-            let progress = (time - startTime) / 2000;
-            if (progress > 1) progress = 1;
-            const p = invisiblePath.getPointAtLength(progress * totalLen);
-            train.setAttribute('transform', `translate(${p.x}, ${p.y})`);
-            if (progress < 1) requestAnimationFrame(animate);
-            else train.classList.add('success-fx');
-        }
-        setTimeout(() => { playSound('run'); requestAnimationFrame(animate); }, 500);
-    }
     // 全ステップ共通：回数設定に基づいてオーバーレイを表示
     showClearOverlay(customMsg);
 }

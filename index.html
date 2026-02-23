@@ -29,16 +29,32 @@
                 <div class="top-okojo">
                     <img src="okojo.jpg" alt="オコジョ先生">
                 </div>
-                <h1>オコジョ先生の<br>レールパズル</h1>
+                <h1>
+                    オコジョ<ruby>先生<rt>せんせい</rt></ruby>の<br>レールパズル
+                </h1>
                 <p class="top-sub">ステップを えらんでね！</p>
             </div>
 
             <div class="step-cards">
                 <button class="step-card" data-step="1">
-                    <div class="card-icon">🚂</div>
-                    <div class="card-label">ステップ 1<br><span>線を なぞろう</span></div>
+                    <div class="card-icon">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="20" x2="32" y2="20" />
+                        </svg>
+                    </div>
+                    <div class="card-label">ステップ 1<br><span><ruby>線<rt>せん</rt></ruby>を なぞろう</span></div>
                 </button>
                 <button class="step-card" data-step="2">
+                    <div class="card-icon">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M 8,20 Q 16,8 24,20 T 40,20" />
+                        </svg>
+                    </div>
+                    <div class="card-label">ステップ 2<br><span><ruby>曲線<rt>きょくせん</rt></ruby>を なぞろう</span></div>
+                </button>
+                <button class="step-card" data-step="3">
                     <div class="card-icon">
                         <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
                             stroke-linecap="round" stroke-linejoin="round">
@@ -46,28 +62,7 @@
                             <polyline points="24,22 32,30 24,38" transform="translate(0,-8)" />
                         </svg>
                     </div>
-                    <div class="card-label">ステップ 2<br><span>かどに きづこう</span></div>
-                </button>
-                <button class="step-card" data-step="3">
-                    <div class="card-icon">
-                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                            <!-- 枕木 -->
-                            <line x1="8" y1="12" x2="8" y2="28" stroke="#a1887f" stroke-width="3"
-                                stroke-linecap="round" />
-                            <line x1="15" y1="12" x2="15" y2="28" stroke="#a1887f" stroke-width="3"
-                                stroke-linecap="round" />
-                            <line x1="22" y1="12" x2="22" y2="28" stroke="#a1887f" stroke-width="3"
-                                stroke-linecap="round" />
-                            <line x1="29" y1="12" x2="29" y2="28" stroke="#a1887f" stroke-width="3"
-                                stroke-linecap="round" />
-                            <!-- レール -->
-                            <line x1="3" y1="16" x2="37" y2="16" stroke="#546e7a" stroke-width="3"
-                                stroke-linecap="round" />
-                            <line x1="3" y1="24" x2="37" y2="24" stroke="#546e7a" stroke-width="3"
-                                stroke-linecap="round" />
-                        </svg>
-                    </div>
-                    <div class="card-label">ステップ 3<br><span>せんろを つくろう</span></div>
+                    <div class="card-label">ステップ 3<br><span>かどに きづこう</span></div>
                 </button>
                 <button class="step-card" data-step="4">
                     <div class="card-icon">
@@ -106,6 +101,26 @@
                         <button class="round-btn" data-rounds="3">3かい</button>
                         <button class="round-btn" data-rounds="5">5かい</button>
                         <button class="round-btn" data-rounds="0">むげん</button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <label class="settings-section-label">📏 レール の ながさ</label>
+                    <div class="round-buttons" id="length-buttons">
+                        <button class="length-btn active" data-length="2">ふつう (2)</button>
+                        <button class="length-btn" data-length="1">みじかい (1)</button>
+                        <button class="length-btn" data-length="3">ながい (3)</button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <label class="settings-section-label">🧭 レール の むき</label>
+                    <div class="round-buttons" id="direction-buttons">
+                        <button class="dir-btn active" data-dir="random">ランダム</button>
+                        <button class="dir-btn" data-dir="right">右へ (→)</button>
+                        <button class="dir-btn" data-dir="left">左へ (←)</button>
+                        <button class="dir-btn" data-dir="down">下へ (↓)</button>
+                        <button class="dir-btn" data-dir="up">上へ (↑)</button>
                     </div>
                 </div>
 
