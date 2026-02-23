@@ -675,4 +675,37 @@ footer {
     .card-label span {
         font-size: 0.9rem;
     }
+
+    /* 設定モーダルの縮小とスクロール対応 */
+    .settings-card {
+        width: 95%;
+        max-width: 420px;
+        /* デスクトップのmax-widthと同じかやや小さく */
+        padding: 24px 20px;
+        max-height: 85vh;
+        /* スマホ画面の上下にはみ出ないように高さ制限 */
+        overflow-y: auto;
+        /* 高さを超えたら縦スクロール可能にする */
+    }
+
+    .settings-card h2 {
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+    }
+
+    .settings-section {
+        margin-bottom: 16px;
+    }
+
+    .round-btn,
+    .length-btn,
+    .dir-btn {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+
+    .color-swatch {
+        width: 36px;
+        height: 36px;
+    }
 }
