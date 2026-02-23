@@ -1,0 +1,628 @@
+:root {
+    --primary-color: #4CAF50;
+    --secondary-color: #8BC34A;
+    --accent-color: #FFC107;
+    --bg-color: #E8F5E9;
+    --rail-color: #9E9E9E;
+    --rail-accent: #795548;
+    --text-color: #333;
+    --train-color: #F44336;
+    --station-color: #2196F3;
+}
+
+* {
+    box-sizing: border-box;
+    user-select: none;
+    touch-action: none;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #a8edea, #fed6e3);
+    font-family: 'Hiragino Maru Gothic ProN', 'Rounded M+ 1c', sans-serif;
+    color: var(--text-color);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+#app-container {
+    width: 100%;
+    max-width: 1024px;
+    height: 100%;
+    max-height: 768px;
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+/* ============================
+   画面切り替え共通
+============================= */
+.screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.screen.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ============================
+   トップ画面
+============================= */
+#screen-top {
+    background: linear-gradient(160deg, #f9fff9 0%, #e8f5e9 100%);
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    gap: 20px;
+}
+
+.top-header {
+    text-align: center;
+}
+
+.top-okojo {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    overflow: hidden;
+    animation: bob 2.5s infinite ease-in-out;
+    display: inline-block;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    border: 4px solid white;
+    box-sizing: content-box;
+}
+
+.top-okojo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.top-header h1 {
+    margin: 10px 0 4px;
+    font-size: 2rem;
+    color: var(--primary-color);
+    line-height: 1.3;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.07);
+}
+
+.top-sub {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #777;
+}
+
+.step-cards {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.step-card {
+    background: linear-gradient(145deg, #ffffff 0%, #f5fff5 100%);
+    border: 2px solid rgba(76, 175, 80, 0.15);
+    border-radius: 22px;
+    padding: 20px 14px 16px;
+    width: 140px;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+    transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.step-card:hover,
+.step-card:active {
+    transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 12px 32px rgba(76, 175, 80, 0.2);
+    border-color: var(--primary-color);
+}
+
+.card-icon {
+    font-size: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 48px;
+    height: 48px;
+}
+
+.card-label {
+    font-size: 1rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    line-height: 1.4;
+}
+
+.card-label span {
+    font-size: 0.75rem;
+    font-weight: normal;
+    color: #555;
+}
+
+/* ============================
+   ゲーム画面
+============================= */
+#screen-game {
+    background: #fff;
+}
+
+header {
+    background: var(--primary-color);
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+#btn-home {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#btn-home:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+#step-indicator {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 6px 20px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 1.05rem;
+}
+
+#play-area {
+    flex: 1;
+    position: relative;
+    background: #F1F8E9;
+    overflow: hidden;
+}
+
+#game-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+}
+
+.rail-path {
+    fill: none;
+    stroke: var(--rail-color);
+    stroke-width: 20;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.rail-ties {
+    fill: none;
+    stroke: var(--rail-accent);
+    stroke-width: 10;
+    stroke-dasharray: 10 20;
+    stroke-linecap: butt;
+}
+
+.train {
+    cursor: pointer;
+}
+
+.train.active {
+    /* CSS transform: scale() は SVG transform属性と競合するため使用しない */
+    filter: drop-shadow(0 4px 12px rgba(255, 100, 0, 0.5));
+}
+
+.station {
+    fill: var(--station-color);
+    stroke: #ffffff;
+    stroke-width: 4;
+}
+
+footer {
+    background: #fff;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 2px solid #eee;
+    z-index: 10;
+}
+
+#okojo-guide {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.okojo-avatar {
+    width: 64px;
+    height: 64px;
+    background: #fff;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    border: 3px solid #fff;
+    animation: bob 2s infinite ease-in-out;
+    flex-shrink: 0;
+}
+
+.okojo-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+@keyframes bob {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+.speech-bubble {
+    background: #fff;
+    border: 3px solid var(--accent-color);
+    padding: 10px 18px;
+    border-radius: 20px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    position: relative;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: transform 0.15s;
+}
+
+.speech-bubble::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-width: 10px 15px 10px 0;
+    border-style: solid;
+    border-color: transparent var(--accent-color) transparent transparent;
+}
+
+.speech-bubble::after {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-width: 8px 12px 8px 0;
+    border-style: solid;
+    border-color: transparent #fff transparent transparent;
+}
+
+@keyframes success-pulse {
+    0% {
+        filter: drop-shadow(0 0 0 rgba(255, 193, 7, 0.8));
+    }
+
+    50% {
+        filter: drop-shadow(0 0 20px rgba(255, 193, 7, 0.8));
+    }
+
+    100% {
+        filter: drop-shadow(0 0 0 rgba(255, 193, 7, 0));
+    }
+}
+
+.success-fx {
+    animation: success-pulse 1s ease-out;
+}
+
+.corner-indicator {
+    fill: rgba(255, 193, 7, 0.5);
+    stroke: var(--accent-color);
+    stroke-width: 4;
+    cursor: pointer;
+    animation: corner-pulse 0.8s infinite alternate;
+    pointer-events: auto;
+}
+
+@keyframes corner-pulse {
+    0% {
+        r: 25px;
+        opacity: 0.8;
+    }
+
+    100% {
+        r: 40px;
+        opacity: 0.2;
+    }
+}
+
+.rotate-handle {
+    fill: #fff;
+    stroke: var(--primary-color);
+    stroke-width: 3;
+    cursor: grab;
+}
+
+.rotate-handle:active {
+    cursor: grabbing;
+    fill: #f1f8e9;
+}
+
+/* ============================
+   歯車ボタン
+============================= */
+.settings-gear {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 20;
+    background: rgba(255, 255, 255, 0.85);
+    border: 2px solid rgba(76, 175, 80, 0.25);
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #4CAF50;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.settings-gear:hover {
+    transform: rotate(30deg) scale(1.1);
+    box-shadow: 0 5px 18px rgba(0, 0, 0, 0.15);
+}
+
+/* ============================
+   設定モーダル
+============================= */
+.settings-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    animation: fade-in 0.2s ease;
+}
+
+.settings-overlay.hidden {
+    display: none;
+}
+
+.settings-card {
+    background: #fff;
+    border-radius: 28px;
+    padding: 30px 36px;
+    width: 90%;
+    max-width: 420px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+    animation: pop-in 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.settings-card h2 {
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin: 0 0 20px;
+}
+
+.settings-section {
+    margin-bottom: 20px;
+}
+
+.settings-section-label {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: bold;
+    color: var(--text-color);
+    margin-bottom: 10px;
+}
+
+.round-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.round-btn {
+    padding: 8px 16px;
+    border: 2px solid var(--primary-color);
+    border-radius: 20px;
+    background: #fff;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.18s;
+}
+
+.round-btn.active {
+    background: var(--primary-color);
+    color: #fff;
+    transform: scale(1.08);
+}
+
+.round-btn:hover {
+    background: var(--secondary-color);
+    color: #fff;
+    border-color: var(--secondary-color);
+}
+
+/* カラーパレット */
+.color-palette {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.color-swatch {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.color-swatch:hover {
+    transform: scale(1.15);
+}
+
+.color-swatch.active {
+    border-color: var(--text-color);
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15), 0 3px 8px rgba(0, 0, 0, 0.2);
+    transform: scale(1.12);
+}
+
+.settings-close-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: var(--primary-color);
+    color: #fff;
+    border: none;
+    border-radius: 16px;
+    font-size: 1.05rem;
+    font-family: inherit;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.2s;
+}
+
+.settings-close-btn:hover {
+    background: var(--secondary-color);
+}
+
+/* ============================
+   クリア後オーバーレイ
+============================= */
+.clear-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    animation: fade-in 0.25s ease;
+}
+
+.clear-overlay.hidden {
+    display: none;
+}
+
+.clear-card {
+    background: #fff;
+    border-radius: 24px;
+    padding: 32px 40px;
+    text-align: center;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
+    animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.clear-emoji {
+    font-size: 3rem;
+    margin-bottom: 8px;
+}
+
+.clear-message {
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 6px;
+}
+
+.clear-progress {
+    font-size: 1rem;
+    color: #888;
+    margin-bottom: 20px;
+}
+
+.clear-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.clear-btn {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 18px;
+    font-size: 1.05rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+
+.clear-btn:active {
+    transform: scale(0.96);
+}
+
+.continue-btn {
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: bold;
+}
+
+.back-btn {
+    background: #eee;
+    color: #555;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes pop-in {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}

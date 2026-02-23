@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>オコジョ先生のレールパズル</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="app-container">
+
+        <!-- ============================
+             トップ画面
+        ============================= -->
+        <div id="screen-top" class="screen active">
+            <!-- 歯車ボタン -->
+            <button id="btn-settings" class="settings-gear" title="せってい">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+            </button>
+
+            <div class="top-header">
+                <div class="top-okojo">
+                    <img src="okojo.jpg" alt="オコジョ先生">
+                </div>
+                <h1>オコジョ先生の<br>レールパズル</h1>
+                <p class="top-sub">ステップを えらんでね！</p>
+            </div>
+
+            <div class="step-cards">
+                <button class="step-card" data-step="1">
+                    <div class="card-icon">🚂</div>
+                    <div class="card-label">ステップ 1<br><span>線を なぞろう</span></div>
+                </button>
+                <button class="step-card" data-step="2">
+                    <div class="card-icon">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M 8,10 L 8,30 L 32,30" />
+                            <polyline points="24,22 32,30 24,38" transform="translate(0,-8)" />
+                        </svg>
+                    </div>
+                    <div class="card-label">ステップ 2<br><span>かどに きづこう</span></div>
+                </button>
+                <button class="step-card" data-step="3">
+                    <div class="card-icon">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                            <!-- 枕木 -->
+                            <line x1="8" y1="12" x2="8" y2="28" stroke="#a1887f" stroke-width="3"
+                                stroke-linecap="round" />
+                            <line x1="15" y1="12" x2="15" y2="28" stroke="#a1887f" stroke-width="3"
+                                stroke-linecap="round" />
+                            <line x1="22" y1="12" x2="22" y2="28" stroke="#a1887f" stroke-width="3"
+                                stroke-linecap="round" />
+                            <line x1="29" y1="12" x2="29" y2="28" stroke="#a1887f" stroke-width="3"
+                                stroke-linecap="round" />
+                            <!-- レール -->
+                            <line x1="3" y1="16" x2="37" y2="16" stroke="#546e7a" stroke-width="3"
+                                stroke-linecap="round" />
+                            <line x1="3" y1="24" x2="37" y2="24" stroke="#546e7a" stroke-width="3"
+                                stroke-linecap="round" />
+                        </svg>
+                    </div>
+                    <div class="card-label">ステップ 3<br><span>せんろを つくろう</span></div>
+                </button>
+                <button class="step-card" data-step="4">
+                    <div class="card-icon">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="17" cy="17" r="11" />
+                            <line x1="25" y1="25" x2="35" y2="35" />
+                        </svg>
+                    </div>
+                    <div class="card-label">ステップ 4<br><span>おなじかたちを さがそう</span></div>
+                </button>
+                <button class="step-card" data-step="5">
+                    <div class="card-icon">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M 30,14 A 12,12 0 1,0 26,30" />
+                            <polyline points="30,8 30,16 22,14" />
+                        </svg>
+                    </div>
+                    <div class="card-label">ステップ 5<br><span>まわして あわせよう</span></div>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================
+             設定モーダル
+        ============================= -->
+        <div id="settings-modal" class="settings-overlay hidden">
+            <div class="settings-card">
+                <h2>⚙️ せってい</h2>
+
+                <div class="settings-section">
+                    <label class="settings-section-label">🚂 れんぞく かいすう</label>
+                    <div class="round-buttons" id="round-buttons">
+                        <button class="round-btn active" data-rounds="1">1かい</button>
+                        <button class="round-btn" data-rounds="3">3かい</button>
+                        <button class="round-btn" data-rounds="5">5かい</button>
+                        <button class="round-btn" data-rounds="0">むげん</button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <label class="settings-section-label">🏠 えき の いろ</label>
+                    <div class="color-palette" id="palette-station">
+                        <button class="color-swatch active" data-color="#2196F3" style="background:#2196F3"
+                            title="あお"></button>
+                        <button class="color-swatch" data-color="#4CAF50" style="background:#4CAF50"
+                            title="みどり"></button>
+                        <button class="color-swatch" data-color="#FF9800" style="background:#FF9800"
+                            title="オレンジ"></button>
+                        <button class="color-swatch" data-color="#E91E63" style="background:#E91E63"
+                            title="ピンク"></button>
+                        <button class="color-swatch" data-color="#9C27B0" style="background:#9C27B0"
+                            title="むらさき"></button>
+                        <button class="color-swatch" data-color="#00BCD4" style="background:#00BCD4"
+                            title="みずいろ"></button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <label class="settings-section-label">🚃 でんしゃ の いろ</label>
+                    <div class="color-palette" id="palette-train">
+                        <button class="color-swatch active" data-color="#F44336" style="background:#F44336"
+                            title="あか"></button>
+                        <button class="color-swatch" data-color="#2196F3" style="background:#2196F3"
+                            title="あお"></button>
+                        <button class="color-swatch" data-color="#4CAF50" style="background:#4CAF50"
+                            title="みどり"></button>
+                        <button class="color-swatch" data-color="#FF9800" style="background:#FF9800"
+                            title="オレンジ"></button>
+                        <button class="color-swatch" data-color="#9C27B0" style="background:#9C27B0"
+                            title="むらさき"></button>
+                        <button class="color-swatch" data-color="#FFD600" style="background:#FFD600"
+                            title="きいろ"></button>
+                    </div>
+                </div>
+
+                <button id="btn-settings-close" class="settings-close-btn">とじる</button>
+            </div>
+        </div>
+
+        <!-- ============================
+             ゲーム画面
+        ============================= -->
+        <div id="screen-game" class="screen">
+            <header>
+                <button id="btn-home" title="トップへ戻る">🏠 もどる</button>
+                <div id="step-indicator">ステップ 1</div>
+                <div id="round-indicator" style="width:80px;text-align:right;font-size:0.85rem;color:#fff;opacity:0.85">
+                </div>
+            </header>
+
+            <main id="play-area">
+                <svg id="game-svg" width="100%" height="100%" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
+                    <g id="layer-rails"></g>
+                    <g id="layer-active"></g>
+                    <g id="layer-train"></g>
+                </svg>
+            </main>
+
+            <footer>
+                <div id="okojo-guide">
+                    <div class="okojo-avatar">
+                        <img src="okojo.jpg" alt="オコジョ先生">
+                    </div>
+                    <div class="speech-bubble" id="instruction-text">
+                        よろしくね！
+                    </div>
+                </div>
+            </footer>
+
+            <!-- クリア後オーバーレイ（ステップ1専用） -->
+            <div id="clear-overlay" class="clear-overlay hidden">
+                <div class="clear-card">
+                    <div class="clear-emoji">🎉</div>
+                    <div id="clear-message" class="clear-message">クリア！</div>
+                    <div id="clear-progress" class="clear-progress"></div>
+                    <div class="clear-buttons">
+                        <button id="btn-continue" class="clear-btn continue-btn">つづける ▶</button>
+                        <button id="btn-back-top" class="clear-btn back-btn">トップへ</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
