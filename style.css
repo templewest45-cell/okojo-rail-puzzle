@@ -636,7 +636,43 @@ footer {
     }
 
     to {
-        transform: scale(1);
         opacity: 1;
+    }
+}
+
+/* ============================
+   レスポンシブ対応（スマホ向け）
+============================= */
+@media (max-width: 600px) {
+
+    /* トップ画面のアイコン・タイトル縮小 */
+    .top-okojo {
+        width: 80px;
+        height: 80px;
+        border: 3px solid white;
+    }
+
+    .top-header h1 {
+        font-size: 2.2rem;
+        margin: 16px 0 8px;
+    }
+
+    .top-sub {
+        font-size: 1rem;
+    }
+
+    /* ステップカードの幅と文字縮小 */
+    .step-card {
+        width: 135px;
+        padding: 16px 12px 14px;
+        border-radius: 18px;
+    }
+
+    .card-label {
+        font-size: 1.1rem;
+    }
+
+    .card-label span {
+        font-size: 0.9rem;
     }
 }
