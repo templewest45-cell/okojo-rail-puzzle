@@ -709,3 +709,20 @@ footer {
         height: 36px;
     }
 }
+
+/* 矢印ナビゲーションのアニメーション用 */
+.direction-arrows polygon {
+    transition: opacity 0.3s ease-in-out;
+}
+
+.arrow-hidden {
+    opacity: 0 !important;
+}
+
+.arrow-active {
+    opacity: 0.9 !important;
+}
+
+.arrow-passed {
+    opacity: 0.1 !important;
+}

@@ -95,6 +95,15 @@ const State = {
     step1CurrentRound: 0,
     railLength: 2,
     railDirection: 'random',
+
+    // ランダム連続防止用の履歴
+    lastStep1Dir: null,
+    lastStep2Str: null,
+    lastStep3Str: null,
+    lastStep4Pattern: null,
+
+    // 矢印ナビゲーション用
+    arrows: [],
 };
 
 // --- DOM Elements ---
@@ -530,7 +539,11 @@ function generateStep1Path() {
     let dir = State.railDirection;
     if (dir === 'random') {
         const dirs = ['right', 'left', 'up', 'down', 'up-right', 'down-right', 'up-left', 'down-left'];
-        dir = dirs[Math.floor(Math.random() * dirs.length)];
+        // 前回と同じ方向が出たら引き直す
+        do {
+            dir = dirs[Math.floor(Math.random() * dirs.length)];
+        } while (dir === State.lastStep1Dir);
+        State.lastStep1Dir = dir;
     }
 
     let angle = 0;
@@ -583,10 +596,22 @@ function generateStep2Path() {
     const len = State.railLength * 200;
     const center = { x: 400, y: 300 };
 
-    let dir = State.railDirection;
-    if (dir === 'random') {
-        const dirs = ['right', 'left', 'up', 'down', 'up-right', 'down-right', 'up-left', 'down-left'];
-        dir = dirs[Math.floor(Math.random() * dirs.length)];
+    // 0: アーチ(Q), 1: S字(C), 2: 同方向カーブ(C)
+    let curveType;
+    let currentStr;
+    const dirs = ['right', 'left', 'up', 'down', 'up-right', 'down-right', 'up-left', 'down-left'];
+
+    // カスタム指定がない限りランダム
+    if (State.railDirection === 'random') {
+        do {
+            dir = dirs[Math.floor(Math.random() * dirs.length)];
+            curveType = Math.floor(Math.random() * 3);
+            currentStr = `${dir}_${curveType}`;
+        } while (currentStr === State.lastStep2Str);
+        State.lastStep2Str = currentStr;
+    } else {
+        dir = State.railDirection;
+        curveType = Math.floor(Math.random() * 3);
     }
 
     let angle = 0;
@@ -606,8 +631,6 @@ function generateStep2Path() {
     const endX = center.x + (len / 2) * Math.cos(angle);
     const endY = center.y + (len / 2) * Math.sin(angle);
 
-    // 0: アーチ(Q), 1: S字(C), 2: 同方向カーブ(C)
-    const curveType = Math.floor(Math.random() * 3);
     const perpAngle = angle + Math.PI / 2;
     // 膨らみ具合（長さ設定に応じて少し調整）
     const curveAmount = (100 + State.railLength * 25) * (Math.random() > 0.5 ? 1 : -1);
@@ -647,6 +670,9 @@ function initStep2() {
     drawStation(startPoint.x, startPoint.y);
     drawStation(endPoint.x, endPoint.y);
 
+    // 進行方向の矢印を描画
+    drawDirectionArrows(State.currentPathNode, 3);
+
     // 見切れ防止処理
     adjustViewBoxToFitPath(State.currentPathNode);
 
@@ -674,12 +700,6 @@ function generateStep3Path() {
     const len = State.railLength * 200;
     const center = { x: 400, y: 300 };
 
-    let dir = State.railDirection;
-    if (dir === 'random') {
-        const dirs = ['right', 'left', 'up', 'down'];
-        dir = dirs[Math.floor(Math.random() * dirs.length)];
-    }
-
     const w = len * 0.8;
     const h = len * 0.6;
 
@@ -688,8 +708,22 @@ function generateStep3Path() {
     const yMin = center.y - h / 2;
     const yMax = center.y + h / 2;
 
-    // 長さが2以上のときだけZ字も許可
-    const isZShape = Math.random() > 0.5 && State.railLength >= 2;
+    let dir = State.railDirection;
+    let isZShape;
+    let currentStr;
+
+    if (dir === 'random') {
+        const dirs = ['right', 'left', 'up', 'down'];
+        do {
+            dir = dirs[Math.floor(Math.random() * dirs.length)];
+            // 長さが2以上のときだけZ字も許可
+            isZShape = Math.random() > 0.5 && State.railLength >= 2;
+            currentStr = `${dir}_${isZShape}`;
+        } while (currentStr === State.lastStep3Str);
+        State.lastStep3Str = currentStr;
+    } else {
+        isZShape = Math.random() > 0.5 && State.railLength >= 2;
+    }
 
     let start, corner, end, c1, c2;
 
@@ -739,17 +773,20 @@ function generateStep3Path() {
 }
 
 function initStep3() {
-    setOkojoText('「かど」が あるよ！ とちゅうで すこし まってね！');
+    setOkojoText('「かど」が あるよ！ レールを なぞって はこんでね！');
     const pts = generateStep3Path();
     const { d: pathData, stops } = buildLinePath(pts);
     State.currentPathNode = createRailPath(pathData);
     State.pathLength = State.currentPathNode.getTotalLength();
-    State.stops = stops;
+    State.stops = []; // 角での停止判定を無効化し、一筆書きにする
     State.trailPath = createTrailPath(pathData, State.pathLength);
     const startPoint = State.currentPathNode.getPointAtLength(0);
     const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
     drawStation(startPoint.x, startPoint.y);
     drawStation(endPoint.x, endPoint.y);
+
+    // 進行方向の矢印を描画
+    drawDirectionArrows(State.currentPathNode, 4);
 
     // 見切れ防止処理
     adjustViewBoxToFitPath(State.currentPathNode);
@@ -760,149 +797,143 @@ function initStep3() {
 
 
 // ============================
-// ステップ4/5 共通：形状バリアント定義
+// ステップ4：こうさ（クロス）をなぞる
 // ============================
-const SHAPE_VARIANTS = [
-    {
-        label: 'L字右下',
-        targetPath: 'M -50,-50 L 50,-50 L 50,50',
-        choices: [
-            { path: 'M -50,-50 L 50,-50 L 50,50', correct: true },
-            { path: 'M -50,-50 L -50,50 L 50,50', correct: false },
-            { path: 'M -50,-50 L 50,-50 L 50,5', correct: false },
-        ]
-    },
-    {
-        label: 'L字左下',
-        targetPath: 'M -50,-50 L -50,50 L 50,50',
-        choices: [
-            { path: 'M -50,-50 L -50,50 L 50,50', correct: true },
-            { path: 'M -50,-50 L 50,-50 L 50,50', correct: false },
-            { path: 'M -60,0 L 60,0', correct: false },
-        ]
-    },
-    {
-        label: '直線',
-        targetPath: 'M -60,0 L 60,0',
-        choices: [
-            { path: 'M -60,0 L 60,0', correct: true },
-            { path: 'M -50,-50 L 50,-50 L 50,50', correct: false },
-            { path: 'M -50,-30 L 50,30', correct: false },
-        ]
-    },
-    {
-        label: 'Z字',
-        targetPath: 'M -55,-30 L 0,-30 L 0,30 L 55,30',
-        choices: [
-            { path: 'M -55,-30 L 0,-30 L 0,30 L 55,30', correct: true },
-            { path: 'M -55,30 L 0,30 L 0,-30 L 55,-30', correct: false },
-            { path: 'M -50,-50 L 50,-50 L 50,50', correct: false },
-        ]
-    },
-    {
-        label: 'T字',
-        targetPath: 'M -55,0 L 55,0 M 0,-45 L 0,25',
-        choices: [
-            { path: 'M -55,0 L 55,0 M 0,-45 L 0,25', correct: true },
-            { path: 'M -50,-50 L 50,-50 L 50,50', correct: false },
-            { path: 'M -60,0 L 60,0', correct: false },
-        ]
-    },
-];
+function generateStep4Path() {
+    const center = { x: 400, y: 300 };
+    const scale = 0.5 + (State.railLength * 0.25); // 1: 0.75, 2: 1.0, 3: 1.25
 
-// ============================
-// ステップ4：同定（入門）
-// ============================
+    let pattern;
+    do {
+        pattern = Math.floor(Math.random() * 4);
+    } while (pattern === State.lastStep4Pattern);
+    State.lastStep4Pattern = pattern;
+
+    if (pattern === 0) {
+        // パターンA: 横の8の字 (無限大記号)
+        const w = 180 * scale;
+        const h = 120 * scale;
+        return `M ${center.x},${center.y} C ${center.x + w},${center.y - h} ${center.x + w},${center.y + h} ${center.x},${center.y} C ${center.x - w},${center.y - h} ${center.x - w},${center.y + h} ${center.x},${center.y}`;
+    } else if (pattern === 1) {
+        // パターンB: ループ (一回転する線)
+        const w = 240 * scale;
+        const h = 90 * scale;
+        const loopR = 80 * scale;
+
+        // パターンのバリエーション（全8通り）
+        const dx = Math.random() > 0.5 ? 1 : -1; // 左から入る(1)か、右から入る(-1)か
+        const dy = Math.random() > 0.5 ? 1 : -1; // 上ループ(1)か、下ループ(-1)か
+        const cw = Math.random() > 0.5 ? 1 : -1; // 手前を通って回るか、奥を通って回るかの回転方向
+
+        const p1x = center.x - (w / 2) * dx;
+        const p1y = center.y;
+        const p2x = center.x + (w / 8) * dx;
+        const p2y = center.y;
+
+        const cp1x = center.x + (w / 8 + loopR * cw) * dx;
+        const cp1y = center.y;
+        const cp2x = center.x + (w / 8 + loopR * cw) * dx;
+        const cp2y = center.y - h * dy;
+        const p3x = center.x + (w / 8) * dx;
+        const p3y = center.y - h * dy;
+
+        const cp3x = center.x + (w / 8 - loopR * cw) * dx;
+        const cp3y = center.y - h * dy;
+        const cp4x = center.x + (w / 8 - loopR * cw) * dx;
+        const cp4y = center.y;
+        const p4x = center.x + (w / 8) * dx;
+        const p4y = center.y;
+
+        const p5x = center.x + (w / 2) * dx;
+        const p5y = center.y;
+
+        return `M ${p1x},${p1y} L ${p2x},${p2y} C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p3x},${p3y} C ${cp3x},${cp3y} ${cp4x},${cp4y} ${p4x},${p4y} L ${p5x},${p5y}`;
+    } else if (pattern === 2) {
+        // パターンC: 4の字風 (カクカクした交差)
+        const w = 140 * scale;
+        const h = 140 * scale;
+        return `M ${center.x + w / 2},${center.y + h / 2} L ${center.x - w / 2},${center.y + h / 2} L ${center.x},${center.y - h} L ${center.x},${center.y + h}`;
+    } else {
+        // パターンD: 縦の8の字
+        const w = 120 * scale;
+        const h = 180 * scale;
+        return `M ${center.x},${center.y} C ${center.x - w},${center.y + h} ${center.x + w},${center.y + h} ${center.x},${center.y} C ${center.x - w},${center.y - h} ${center.x + w},${center.y - h} ${center.x},${center.y}`;
+    }
+}
+
 function initStep4() {
-    setOkojoText('うえの おてほん と おなじ かたち を さがして、ピタッと あわせてね！');
-    setupShapePuzzle(false);
+    setOkojoText('みち が まじわっているよ！ センを はみださないように えきまで はこんでね！');
+    const pathData = generateStep4Path();
+
+    State.currentPathNode = createRailPath(pathData);
+    State.pathLength = State.currentPathNode.getTotalLength();
+    State.stops = []; // 交差も一筆書きですすむ
+
+    State.trailPath = createTrailPath(pathData, State.pathLength);
+
+    const startPoint = State.currentPathNode.getPointAtLength(0);
+    const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
+    drawStation(startPoint.x, startPoint.y);
+    drawStation(endPoint.x, endPoint.y);
+
+    // 進行方向の矢印を描画（State.arrows配列が初期化される）
+    State.arrows = [];
+    drawDirectionArrows(State.currentPathNode, 6);
+
+    adjustViewBoxToFitPath(State.currentPathNode);
+
+    State.trainNode = drawTrain(startPoint.x, startPoint.y);
+    setupTrainDrag(State.trainNode);
 }
 
 // ============================
-// ステップ5：回転と同定（応用）
+// 矢印マーク描画機能
 // ============================
-function initStep5() {
-    setOkojoText('むき が ちがう かたち も あるよ！ まるいボタン で まわしてみてね！');
-    setupShapePuzzle(true);
-}
+function drawDirectionArrows(pathNode, numArrows = 4) {
+    const len = pathNode.getTotalLength();
+    const arrowGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    arrowGroup.setAttribute('class', 'direction-arrows');
 
-function setupShapePuzzle(withRotation) {
-    // ランダムにバリアントを選択
-    const variant = SHAPE_VARIANTS[Math.floor(Math.random() * SHAPE_VARIANTS.length)];
+    State.arrows = []; // 念のため初期化
 
-    // お手本表示
-    const targetGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    targetGroup.setAttribute('transform', `translate(${State.targetPos.x}, ${State.targetPos.y})`);
-    const targetBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    targetBg.setAttribute('x', -90); targetBg.setAttribute('y', -90);
-    targetBg.setAttribute('width', 180); targetBg.setAttribute('height', 180);
-    targetBg.setAttribute('fill', 'rgba(0,0,0,0.05)'); targetBg.setAttribute('rx', 20);
-    targetGroup.appendChild(targetBg);
-    const targetPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    targetPath.setAttribute('d', variant.targetPath);
-    targetPath.setAttribute('fill', 'none');
-    targetPath.setAttribute('stroke', 'var(--rail-color)');
-    targetPath.setAttribute('stroke-width', '15');
-    targetPath.setAttribute('stroke-linecap', 'round');
-    targetPath.setAttribute('stroke-linejoin', 'round');
-    targetGroup.appendChild(targetPath);
-    layerRails.appendChild(targetGroup);
+    // 均等間隔で矢印を配置
+    for (let i = 1; i <= numArrows; i++) {
+        const l = (len / (numArrows + 1)) * i;
+        const p0 = pathNode.getPointAtLength(l);
+        const p1 = pathNode.getPointAtLength(Math.min(len, l + 1));
+        const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180 / Math.PI;
 
-    // 選択肢（ステップ5は正解の初期回転をランダムに設定）
-    const rotAngles = [90, 180, -90];
-    const choices = variant.choices.map(c => ({
-        ...c,
-        angle: (withRotation && c.correct)
-            ? rotAngles[Math.floor(Math.random() * rotAngles.length)]
-            : 0
-    }));
-    choices.sort(() => Math.random() - 0.5);
+        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        // 白塗りに赤枠の矢印
+        arrow.setAttribute('points', '-8,-10 10,0 -8,10');
+        arrow.setAttribute('fill', 'white');
+        arrow.setAttribute('stroke', '#E91E63'); // station-color
+        arrow.setAttribute('stroke-width', '3');
+        arrow.setAttribute('stroke-linejoin', 'round');
 
-    choices.forEach((choice, index) => {
-        const x = 200 + index * 200;
-        const y = 450;
-        const choiceGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        choiceGroup.dataset.correct = String(choice.correct);
-        choiceGroup.dataset.startX = x;
-        choiceGroup.dataset.startY = y;
-        choiceGroup.dataset.angle = choice.angle;
-        choiceGroup.setAttribute('transform', `translate(${x}, ${y}) rotate(${choice.angle})`);
-        choiceGroup.setAttribute('class', 'draggable-shape');
-        choiceGroup.style.cursor = 'grab';
-
-        const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        hitArea.setAttribute('x', -80); hitArea.setAttribute('y', -80);
-        hitArea.setAttribute('width', 160); hitArea.setAttribute('height', 160);
-        hitArea.setAttribute('fill', 'transparent');
-        choiceGroup.appendChild(hitArea);
-
-        const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        bg.setAttribute('x', -80); bg.setAttribute('y', -80);
-        bg.setAttribute('width', 160); bg.setAttribute('height', 160);
-        bg.setAttribute('fill', 'white'); bg.setAttribute('rx', 15);
-        bg.setAttribute('stroke', '#ccc'); bg.setAttribute('stroke-width', '2');
-        choiceGroup.appendChild(bg);
-
-        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        p.setAttribute('d', choice.path);
-        p.setAttribute('fill', 'none');
-        p.setAttribute('stroke', 'var(--station-color)');
-        p.setAttribute('stroke-width', '15');
-        p.setAttribute('stroke-linecap', 'round');
-        p.setAttribute('stroke-linejoin', 'round');
-        choiceGroup.appendChild(p);
-
-        if (withRotation) {
-            const rHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            rHandle.setAttribute('cx', 80); rHandle.setAttribute('cy', 80);
-            rHandle.setAttribute('r', 15); rHandle.setAttribute('class', 'rotate-handle');
-            choiceGroup.appendChild(rHandle);
+        // 最初の1つ目だけアクティブ、それ以降は非表示
+        if (i === 1) {
+            arrow.setAttribute('class', 'arrow-active');
+        } else {
+            arrow.setAttribute('class', 'arrow-hidden');
         }
 
-        layerActive.appendChild(choiceGroup);
-        choiceGroup.addEventListener('pointerdown', startShapeDrag);
-    });
+        arrow.setAttribute('transform', `translate(${p0.x}, ${p0.y}) rotate(${angle}) scale(1.2)`);
+
+        arrowGroup.appendChild(arrow);
+
+        // 順次表示ナビゲーション用にStateへ登録
+        State.arrows.push({
+            node: arrow,
+            length: l
+        });
+    }
+
+    // レールレイヤーに追加（電車の下）
+    layerRails.appendChild(arrowGroup);
 }
+
+// (旧図形パズル機能は削除済)
 
 function parseTransform(transformStr) {
     let x = 0, y = 0, angle = 0;
@@ -1034,6 +1065,26 @@ function onPointerMove(e) {
         State.trainProgress = nextProgress;
         const p = State.currentPathNode.getPointAtLength(State.trainProgress);
         State.trainNode.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+
+        // 矢印の順次表示ナビゲーションの更新
+        if (State.arrows && State.arrows.length > 0) {
+            let activeSet = false;
+            for (let i = 0; i < State.arrows.length; i++) {
+                const arrObj = State.arrows[i];
+                // マージン(5px程度)をつけて、通り過ぎたかを判定
+                if (State.trainProgress > arrObj.length - 5) {
+                    // 通り過ぎた矢印は消す
+                    arrObj.node.setAttribute('class', 'arrow-passed');
+                } else if (!activeSet) {
+                    // まだ通り過ぎていないグループのうち、一番手前にあるものをアクティブに
+                    arrObj.node.setAttribute('class', 'arrow-active');
+                    activeSet = true;
+                } else {
+                    // それより先の矢印は隠しておく
+                    arrObj.node.setAttribute('class', 'arrow-hidden');
+                }
+            }
+        }
 
         // 軌跡 (stroke-dashoffset) を進行量に合わせて更新
         if (State.trailPath) {
