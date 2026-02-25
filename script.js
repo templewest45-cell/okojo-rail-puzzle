@@ -100,10 +100,17 @@ const State = {
     lastStep1Dir: null,
     lastStep2Str: null,
     lastStep3Str: null,
-    lastStep4Pattern: null,
+
+    // ステップ4のステージ用
+    step4Stage: 1,
+    maxStep4Stage: 8,
 
     // 矢印ナビゲーション用
     arrows: [],
+
+    // ステップ4 複数路線管理用
+    step4Lines: [],
+    activeLineIndex: -1,
 };
 
 // --- DOM Elements ---
@@ -195,10 +202,26 @@ function init() {
     // クリアオーバーレイ：つづける
     btnContinue.addEventListener('click', () => {
         clearOverlay.classList.add('hidden');
-        const total = State.step1TotalRounds;
-        const allDone = total !== 0 && State.step1CurrentRound >= total;
-        if (allDone) State.step1CurrentRound = 0;
-        loadStep(State.step);
+
+        if (State.step === 4) {
+            // ステップ4の面進行処理
+            if (State.step4Stage >= State.maxStep4Stage) {
+                // 全クリ時はトップへ戻り、進捗リセット
+                State.step4Stage = 1;
+                clearCanvas();
+                showScreen('screen-top');
+            } else {
+                // 次のコースへ進む
+                State.step4Stage++;
+                loadStep(State.step);
+            }
+        } else {
+            // ステップ1〜3の回数進行処理
+            const total = State.step1TotalRounds;
+            const allDone = total !== 0 && State.step1CurrentRound >= total;
+            if (allDone) State.step1CurrentRound = 0;
+            loadStep(State.step);
+        }
     });
 
     // クリアオーバーレイ：トップへ
@@ -211,6 +234,8 @@ function init() {
     btnHome.addEventListener('click', () => {
         clearOverlay.classList.add('hidden');
         clearCanvas();
+        // ホームに戻ったら面進捗はリセットする
+        State.step4Stage = 1;
         showScreen('screen-top');
     });
 
@@ -432,7 +457,7 @@ function createTrailPath(pathData, totalLength) {
     return trail;
 }
 
-function drawStation(x, y) {
+function drawStation(x, y, color = null) {
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     group.setAttribute('class', 'station-group');
     group.setAttribute('transform', `translate(${x}, ${y})`);
@@ -445,6 +470,9 @@ function drawStation(x, y) {
     rect.setAttribute('height', 40);
     rect.setAttribute('rx', 10);
     rect.setAttribute('class', 'station');
+    if (color) {
+        rect.style.fill = color;
+    }
     group.appendChild(rect);
 
     // 三角屋根（茶色）
@@ -456,7 +484,7 @@ function drawStation(x, y) {
     layerRails.appendChild(group);
 }
 
-function drawTrain(x, y) {
+function drawTrain(x, y, color = null) {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'train');
     g.setAttribute('transform', `translate(${x}, ${y})`);
@@ -472,7 +500,8 @@ function drawTrain(x, y) {
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     rect.setAttribute('x', -45); rect.setAttribute('y', -30);
     rect.setAttribute('width', 90); rect.setAttribute('height', 60);
-    rect.setAttribute('rx', 14); rect.setAttribute('fill', 'var(--train-color)');
+    rect.setAttribute('rx', 14);
+    rect.setAttribute('fill', color ? color : 'var(--train-color)');
     g.appendChild(rect);
 
     // 前面パネル（色分け）
@@ -523,6 +552,24 @@ function setupTrainDrag(node) {
         initAudio();
         State.isDragging = true;
         State.dragType = 'train';
+        State.activeLineIndex = -1; // 複数路線でない場合は-1
+        node.setPointerCapture(e.pointerId);
+        State.lastTrainDragPt = getSVGPoint(e);
+        node.classList.add('active');
+    });
+}
+
+function setupMultiTrainDrag(node, lineIndex) {
+    node.addEventListener('pointerdown', e => {
+        if (State.isStepCompleted || State.waitingForTap) return;
+        if (State.step4Lines[lineIndex] && State.step4Lines[lineIndex].isCompleted) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        initAudio();
+        State.isDragging = true;
+        State.dragType = 'train';
+        State.activeLineIndex = lineIndex;
         node.setPointerCapture(e.pointerId);
         State.lastTrainDragPt = getSVGPoint(e);
         node.classList.add('active');
@@ -797,104 +844,157 @@ function initStep3() {
 
 
 // ============================
-// ステップ4：こうさ（クロス）をなぞる
+// ステップ4：こうさ（クロス）をなぞる (複数車両・全8ステージ制)
 // ============================
 function generateStep4Path() {
     const center = { x: 400, y: 300 };
-    const scale = 0.5 + (State.railLength * 0.25); // 1: 0.75, 2: 1.0, 3: 1.25
+    const scale = Math.min(1.0, 0.6 + (State.step4Stage * 0.05));
+    const stage = State.step4Stage;
 
-    let pattern;
-    do {
-        pattern = Math.floor(Math.random() * 4);
-    } while (pattern === State.lastStep4Pattern);
-    State.lastStep4Pattern = pattern;
-
-    if (pattern === 0) {
-        // パターンA: 横の8の字 (無限大記号)
-        const w = 180 * scale;
-        const h = 120 * scale;
-        return `M ${center.x},${center.y} C ${center.x + w},${center.y - h} ${center.x + w},${center.y + h} ${center.x},${center.y} C ${center.x - w},${center.y - h} ${center.x - w},${center.y + h} ${center.x},${center.y}`;
-    } else if (pattern === 1) {
-        // パターンB: ループ (一回転する線)
-        const w = 240 * scale;
-        const h = 90 * scale;
-        const loopR = 80 * scale;
-
-        // パターンのバリエーション（全8通り）
-        const dx = Math.random() > 0.5 ? 1 : -1; // 左から入る(1)か、右から入る(-1)か
-        const dy = Math.random() > 0.5 ? 1 : -1; // 上ループ(1)か、下ループ(-1)か
-        const cw = Math.random() > 0.5 ? 1 : -1; // 手前を通って回るか、奥を通って回るかの回転方向
-
-        const p1x = center.x - (w / 2) * dx;
-        const p1y = center.y;
-        const p2x = center.x + (w / 8) * dx;
-        const p2y = center.y;
-
-        const cp1x = center.x + (w / 8 + loopR * cw) * dx;
-        const cp1y = center.y;
-        const cp2x = center.x + (w / 8 + loopR * cw) * dx;
-        const cp2y = center.y - h * dy;
-        const p3x = center.x + (w / 8) * dx;
-        const p3y = center.y - h * dy;
-
-        const cp3x = center.x + (w / 8 - loopR * cw) * dx;
-        const cp3y = center.y - h * dy;
-        const cp4x = center.x + (w / 8 - loopR * cw) * dx;
-        const cp4y = center.y;
-        const p4x = center.x + (w / 8) * dx;
-        const p4y = center.y;
-
-        const p5x = center.x + (w / 2) * dx;
-        const p5y = center.y;
-
-        return `M ${p1x},${p1y} L ${p2x},${p2y} C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p3x},${p3y} C ${cp3x},${cp3y} ${cp4x},${cp4y} ${p4x},${p4y} L ${p5x},${p5y}`;
-    } else if (pattern === 2) {
-        // パターンC: 4の字風 (カクカクした交差)
+    if (stage === 1) {
+        // --- 1面: 十字 (2車両) ---
+        const s = 150 * scale;
+        return [
+            `M ${center.x},${center.y - s} L ${center.x},${center.y + s}`, // タテ
+            `M ${center.x - s},${center.y} L ${center.x + s},${center.y}`  // ヨコ
+        ];
+    } else if (stage === 2) {
+        // --- 2面: T字 (2車両) ---
+        const s = 150 * scale;
+        return [
+            `M ${center.x - s},${center.y - 50 * scale} L ${center.x + s},${center.y - 50 * scale}`, // 上部のヨコ
+            `M ${center.x},${center.y + s} L ${center.x},${center.y - 50 * scale}` // 下から上へのタテ
+        ];
+    } else if (stage === 3) {
+        // --- 3面: 斜め交差 (X字, 2車両) ---
+        const s = 140 * scale;
+        return [
+            `M ${center.x - s},${center.y - s} L ${center.x + s},${center.y + s}`, // 左上から右下
+            `M ${center.x + s},${center.y - s} L ${center.x - s},${center.y + s}`  // 右上から左下
+        ];
+    } else if (stage === 4) {
+        // --- 4面: キ (3車両) ---
+        const w = 150 * scale;
+        const h = 180 * scale;
+        return [
+            `M ${center.x - w},${center.y - 60 * scale} L ${center.x + w},${center.y - 60 * scale}`, // 上ヨコ
+            `M ${center.x - w},${center.y + 20 * scale} L ${center.x + w},${center.y + 20 * scale}`, // 中ヨコ
+            `M ${center.x},${center.y - h} L ${center.x},${center.y + h}` // タテ
+        ];
+    } else if (stage === 5) {
+        // --- 5面: 井 (4車両) ---
+        const w = 160 * scale;
+        const h = 160 * scale;
+        const offset = 60 * scale;
+        return [
+            `M ${center.x - offset},${center.y - h} L ${center.x - offset},${center.y + h}`, // 左タテ
+            `M ${center.x + offset},${center.y - h} L ${center.x + offset},${center.y + h}`, // 右タテ
+            `M ${center.x - w},${center.y - offset} L ${center.x + w},${center.y - offset}`, // 上ヨコ
+            `M ${center.x - w},${center.y + offset} L ${center.x + w},${center.y + offset}`  // 下ヨコ
+        ];
+    } else if (stage === 6) {
+        // --- 6面: 4の字 (1筆書き) ---
         const w = 140 * scale;
         const h = 140 * scale;
-        return `M ${center.x + w / 2},${center.y + h / 2} L ${center.x - w / 2},${center.y + h / 2} L ${center.x},${center.y - h} L ${center.x},${center.y + h}`;
+        return [
+            `M ${center.x + w / 2},${center.y + h / 2} L ${center.x - w / 2},${center.y + h / 2} L ${center.x},${center.y - h} L ${center.x},${center.y + h}`
+        ];
+    } else if (stage === 7) {
+        // --- 7面: 星型 (☆, 1筆書き) ---
+        const r = 160 * scale;
+        const pts = [];
+        for (let i = 0; i <= 5; i++) {
+            const angle = -Math.PI / 2 + (i * 144) * (Math.PI / 180);
+            pts.push({
+                x: center.x + r * Math.cos(angle),
+                y: center.y + r * Math.sin(angle)
+            });
+        }
+        return [
+            `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y} L ${pts[2].x},${pts[2].y} L ${pts[3].x},${pts[3].y} L ${pts[4].x},${pts[4].y} L ${pts[5].x},${pts[5].y}`
+        ];
     } else {
-        // パターンD: 縦の8の字
-        const w = 120 * scale;
-        const h = 180 * scale;
-        return `M ${center.x},${center.y} C ${center.x - w},${center.y + h} ${center.x + w},${center.y + h} ${center.x},${center.y} C ${center.x - w},${center.y - h} ${center.x + w},${center.y - h} ${center.x},${center.y}`;
+        // --- 8面: 8の字 (無限大, 1筆書き) ---
+        const w = 180 * scale;
+        const h = 120 * scale;
+        return [
+            `M ${center.x},${center.y} C ${center.x + w},${center.y - h} ${center.x + w},${center.y + h} ${center.x},${center.y} C ${center.x - w},${center.y - h} ${center.x - w},${center.y + h} ${center.x},${center.y}`
+        ];
     }
 }
 
 function initStep4() {
-    setOkojoText('みち が まじわっているよ！ センを はみださないように えきまで はこんでね！');
-    const pathData = generateStep4Path();
+    const stageNames = ['十字', 'T字', '斜め交差', 'キ', '井', '4の字', '星', '8の字'];
+    const stageName = stageNames[State.step4Stage - 1];
+    if (State.step4Stage <= 5) {
+        setOkojoText(`【${stageName}】でんしゃ を それぞれの えき に はこんでね！ （${State.step4Stage}/${State.maxStep4Stage}）`);
+    } else {
+        setOkojoText(`【${stageName}】こうさを なぞろう！ （${State.step4Stage}/${State.maxStep4Stage}）`);
+    }
 
-    State.currentPathNode = createRailPath(pathData);
-    State.pathLength = State.currentPathNode.getTotalLength();
-    State.stops = []; // 交差も一筆書きですすむ
+    const pathsData = generateStep4Path();
 
-    State.trailPath = createTrailPath(pathData, State.pathLength);
+    State.step4Lines = [];
+    State.activeLineIndex = -1;
+    const colors = ['#E91E63', '#2196F3', '#4CAF50', '#FF9800']; // ピンク, 青, 緑, オレンジ
 
-    const startPoint = State.currentPathNode.getPointAtLength(0);
-    const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
-    drawStation(startPoint.x, startPoint.y);
-    drawStation(endPoint.x, endPoint.y);
+    pathsData.forEach((pathData, index) => {
+        const pathNode = createRailPath(pathData);
+        const pathLength = pathNode.getTotalLength();
+        const trailPath = createTrailPath(pathData, pathLength);
 
-    // 進行方向の矢印を描画（State.arrows配列が初期化される）
-    State.arrows = [];
-    drawDirectionArrows(State.currentPathNode, 6);
+        const startPoint = pathNode.getPointAtLength(0);
+        const endPoint = pathNode.getPointAtLength(pathLength);
 
-    adjustViewBoxToFitPath(State.currentPathNode);
+        const isMultiLine = pathsData.length > 1;
+        const color = isMultiLine ? colors[index % colors.length] : undefined;
 
-    State.trainNode = drawTrain(startPoint.x, startPoint.y);
-    setupTrainDrag(State.trainNode);
+        drawStation(startPoint.x, startPoint.y, color);
+        drawStation(endPoint.x, endPoint.y, color);
+
+        const lineObj = {
+            pathNode: pathNode,
+            pathLength: pathLength,
+            trailPath: trailPath,
+            trainNode: null,
+            trainProgress: 0,
+            isCompleted: false,
+        };
+        State.step4Lines.push(lineObj);
+
+        drawDirectionArrows(pathNode, 4, color || '#E91E63', index);
+
+        const trainNode = drawTrain(startPoint.x, startPoint.y, color);
+        lineObj.trainNode = trainNode;
+
+        // ドラッグ設定
+        if (isMultiLine) {
+            setupMultiTrainDrag(trainNode, index);
+        } else {
+            // 後半ステージは従来の変数(State.trainNode等)に依存している部分の互換性を持たせるため
+            State.trainNode = trainNode;
+            State.currentPathNode = pathNode;
+            State.pathLength = pathLength;
+            State.trailPath = trailPath;
+            State.stops = [];
+            setupTrainDrag(trainNode);
+        }
+    });
+
+    if (State.step4Lines.length > 0) {
+        adjustViewBoxToFitPath(State.step4Lines[0].pathNode);
+    }
 }
 
 // ============================
 // 矢印マーク描画機能
 // ============================
-function drawDirectionArrows(pathNode, numArrows = 4) {
+function drawDirectionArrows(pathNode, numArrows = 4, color = '#E91E63', lineIndex = -1) {
     const len = pathNode.getTotalLength();
     const arrowGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     arrowGroup.setAttribute('class', 'direction-arrows');
 
-    State.arrows = []; // 念のため初期化
+    const createdArrows = [];
 
     // 均等間隔で矢印を配置
     for (let i = 1; i <= numArrows; i++) {
@@ -904,10 +1004,10 @@ function drawDirectionArrows(pathNode, numArrows = 4) {
         const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180 / Math.PI;
 
         const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        // 白塗りに赤枠の矢印
+        // 白塗りにカラー枠の矢印
         arrow.setAttribute('points', '-8,-10 10,0 -8,10');
         arrow.setAttribute('fill', 'white');
-        arrow.setAttribute('stroke', '#E91E63'); // station-color
+        arrow.setAttribute('stroke', color);
         arrow.setAttribute('stroke-width', '3');
         arrow.setAttribute('stroke-linejoin', 'round');
 
@@ -922,8 +1022,7 @@ function drawDirectionArrows(pathNode, numArrows = 4) {
 
         arrowGroup.appendChild(arrow);
 
-        // 順次表示ナビゲーション用にStateへ登録
-        State.arrows.push({
+        createdArrows.push({
             node: arrow,
             length: l
         });
@@ -931,6 +1030,16 @@ function drawDirectionArrows(pathNode, numArrows = 4) {
 
     // レールレイヤーに追加（電車の下）
     layerRails.appendChild(arrowGroup);
+
+    // ステップ4の複数路線の場合は線のデータに紐づけ、それ以外はState.arrowsに入れる
+    if (lineIndex >= 0 && State.step4Lines) {
+        if (!State.step4Lines[lineIndex].arrows) {
+            State.step4Lines[lineIndex].arrows = [];
+        }
+        State.step4Lines[lineIndex].arrows = createdArrows;
+    } else {
+        State.arrows = createdArrows;
+    }
 }
 
 // (旧図形パズル機能は削除済)
@@ -1027,68 +1136,100 @@ function onPointerMove(e) {
     // “絶対座標から最近点”ではなく、“指の動き差分をパス接線方向へ投影”して進行量を加算
     if (State.dragType === 'train') {
         if (State.isStepCompleted || State.waitingForTap) return;
+
+        let currentPathNode = State.currentPathNode;
+        let pathLength = State.pathLength;
+        let trainNode = State.trainNode;
+        let trainProgress = State.trainProgress;
+        let trailPath = State.trailPath;
+        let arrows = State.arrows;
+
+        const isMultiLine = State.activeLineIndex >= 0 && State.step4Lines;
+        if (isMultiLine) {
+            const lineData = State.step4Lines[State.activeLineIndex];
+            if (lineData.isCompleted) return;
+            currentPathNode = lineData.pathNode;
+            pathLength = lineData.pathLength;
+            trainNode = lineData.trainNode;
+            trainProgress = lineData.trainProgress;
+            trailPath = lineData.trailPath;
+            arrows = lineData.arrows;
+        }
+
         if (!State.lastTrainDragPt) { State.lastTrainDragPt = pt; return; }
 
-        // 指の移動差分（SVG座標系）
-        const dx = pt.x - State.lastTrainDragPt.x;
-        const dy = pt.y - State.lastTrainDragPt.y;
         State.lastTrainDragPt = pt;
 
-        // 現在のパス上の接線ベクトルを求める
-        const eps = 0.5;
-        const safeLen = Math.max(0, Math.min(State.pathLength - eps, State.trainProgress));
-        const p0 = State.currentPathNode.getPointAtLength(safeLen);
-        const p1 = State.currentPathNode.getPointAtLength(safeLen + eps);
-        const tLen = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
-        const tx = (p1.x - p0.x) / tLen;
-        const ty = (p1.y - p0.y) / tLen;
+        // 進行判定を「軌跡接線への投影」から「ローカル範囲での近傍点スナップ」に変更
+        // 星形のような鋭角交差でも引っかからず自然に曲がれるよう、進行方向（前方）の探索範囲を広げる
+        const searchBackward = 30;   // 後退の許容範囲
+        const searchForward = 200;   // 前進のしやすさ・カーブの許容度
+        const searchStart = Math.max(0, trainProgress - searchBackward);
+        const searchEnd = Math.min(pathLength, trainProgress + searchForward);
 
-        // 移動差分を接線方向へ投影→進行量に加算
-        const projected = dx * tx + dy * ty;
-        let nextProgress = State.trainProgress + projected;
-        nextProgress = Math.max(0, Math.min(State.pathLength, nextProgress));
+        let minDistance = Infinity;
+        let nextProgress = trainProgress;
+        const stepSize = 5; // 5px刻みで滑らかに探索する
+
+        for (let l = searchStart; l <= searchEnd; l += stepSize) {
+            const p = currentPathNode.getPointAtLength(l);
+            const dist = Math.hypot(p.x - pt.x, p.y - pt.y);
+            if (dist < minDistance) {
+                minDistance = dist;
+                nextProgress = l;
+            }
+        }
+
+        // 指がパスから離れすぎている場合は進めない
+        // ユーザー要望の「太さを上げる」を実現するため許容範囲(dragTolerance)を150pxと広めに設定
+        const dragTolerance = 150;
+        if (minDistance > dragTolerance) {
+            nextProgress = trainProgress;
+        }
+
+        nextProgress = Math.max(0, Math.min(pathLength, nextProgress));
 
         // ストップポイントチェック
-        if (State.stops.length > State.currentStopIndex) {
+        if (!isMultiLine && State.stops && State.stops.length > State.currentStopIndex) {
             const nextStop = State.stops[State.currentStopIndex];
-            if (State.trainProgress <= nextStop.length && nextProgress >= nextStop.length - 5) {
+            if (trainProgress <= nextStop.length && nextProgress >= nextStop.length - 5) {
                 nextProgress = nextStop.length;
-                // 角到達時：PointerCaptureを解放してインジケーターをタップできるようにする
-                try { State.trainNode.releasePointerCapture(e.pointerId); } catch (ex) { }
+                try { trainNode.releasePointerCapture(e.pointerId); } catch (ex) { }
                 State.waitingForTap = true;
                 State.isDragging = false;
-                State.trainNode.classList.remove('active');
+                trainNode.classList.remove('active');
                 showCornerPrompt(nextStop);
             }
         }
 
-        State.trainProgress = nextProgress;
-        const p = State.currentPathNode.getPointAtLength(State.trainProgress);
-        State.trainNode.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+        trainProgress = nextProgress;
 
-        // 矢印の順次表示ナビゲーションの更新
-        if (State.arrows && State.arrows.length > 0) {
+        if (isMultiLine) {
+            State.step4Lines[State.activeLineIndex].trainProgress = trainProgress;
+        } else {
+            State.trainProgress = trainProgress;
+        }
+
+        const p = currentPathNode.getPointAtLength(trainProgress);
+        trainNode.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+
+        if (arrows && arrows.length > 0) {
             let activeSet = false;
-            for (let i = 0; i < State.arrows.length; i++) {
-                const arrObj = State.arrows[i];
-                // マージン(5px程度)をつけて、通り過ぎたかを判定
-                if (State.trainProgress > arrObj.length - 5) {
-                    // 通り過ぎた矢印は消す
+            for (let i = 0; i < arrows.length; i++) {
+                const arrObj = arrows[i];
+                if (trainProgress > arrObj.length - 5) {
                     arrObj.node.setAttribute('class', 'arrow-passed');
                 } else if (!activeSet) {
-                    // まだ通り過ぎていないグループのうち、一番手前にあるものをアクティブに
                     arrObj.node.setAttribute('class', 'arrow-active');
                     activeSet = true;
                 } else {
-                    // それより先の矢印は隠しておく
                     arrObj.node.setAttribute('class', 'arrow-hidden');
                 }
             }
         }
 
-        // 軌跡 (stroke-dashoffset) を進行量に合わせて更新
-        if (State.trailPath) {
-            State.trailPath.setAttribute('stroke-dashoffset', State.pathLength - State.trainProgress);
+        if (trailPath) {
+            trailPath.setAttribute('stroke-dashoffset', pathLength - trainProgress);
         }
 
         const now = Date.now();
@@ -1096,10 +1237,24 @@ function onPointerMove(e) {
             playSound('run');
             State.lastRunSoundTime = now;
         }
-        if (!State.waitingForTap && State.trainProgress >= State.pathLength - 5) {
-            const endP = State.currentPathNode.getPointAtLength(State.pathLength);
-            State.trainNode.setAttribute('transform', `translate(${endP.x}, ${endP.y})`);
-            finishStep();
+
+        if (!State.waitingForTap && trainProgress >= pathLength - 5) {
+            const endP = currentPathNode.getPointAtLength(pathLength);
+            trainNode.setAttribute('transform', `translate(${endP.x}, ${endP.y})`);
+
+            if (isMultiLine) {
+                State.step4Lines[State.activeLineIndex].isCompleted = true;
+                trainNode.classList.remove('active');
+                playSound('success');
+                const allCompleted = State.step4Lines.every(line => line.isCompleted);
+                if (allCompleted) {
+                    finishStep();
+                } else {
+                    State.isDragging = false; // この路線のドラッグは終了
+                }
+            } else {
+                finishStep();
+            }
         }
     }
     // Shape Move
@@ -1154,8 +1309,12 @@ function onPointerUp(e) {
     if (!State.isDragging) return;
     State.isDragging = false;
 
-    if (State.dragType === 'train' && State.trainNode && !State.isStepCompleted && !State.waitingForTap) {
-        State.trainNode.classList.remove('active');
+    if (State.dragType === 'train' && !State.isStepCompleted && !State.waitingForTap) {
+        if (State.activeLineIndex >= 0 && State.step4Lines && State.step4Lines[State.activeLineIndex]) {
+            State.step4Lines[State.activeLineIndex].trainNode.classList.remove('active');
+        } else if (State.trainNode) {
+            State.trainNode.classList.remove('active');
+        }
     }
     if (State.dragType === 'line' && State.drawingLineNode) {
         State.drawingLineNode.remove();
@@ -1201,29 +1360,52 @@ function resetShapePos(node) {
 
 // --- 共通クリアオーバーレイ表示 ---
 function showClearOverlay(msg) {
-    State.step1CurrentRound++;
-    const total = State.step1TotalRounds;
-    const cur = State.step1CurrentRound;
-    const isInfinite = (total === 0);
-    const allDone = !isInfinite && cur >= total;
+    if (State.step === 4) {
+        // ステップ4の全6ステージ制用クリア画面
+        const total = State.maxStep4Stage;
+        const cur = State.step4Stage;
+        const allDone = (cur >= total);
 
-    roundIndicator.textContent = isInfinite
-        ? `${cur}かいめ`
-        : `${cur} / ${total}`;
+        roundIndicator.textContent = `${cur} / ${total}`;
 
-    if (allDone) {
-        clearMessage.textContent = 'やった！　全部クリア！';
-        clearProgress.textContent = `${total}かい 全部できたよ！`;
-        btnContinue.textContent = 'もう1ゲーム >';
+        if (allDone) {
+            clearMessage.textContent = 'ぜんぶクリア！すごい！';
+            clearProgress.textContent = '8つのコースを 全部できたよ！';
+            btnContinue.textContent = 'トップにもどる >';
+            setOkojoText('ぜんぶ クリア！ ほんとうに すごいね！ はなまる だよ！');
+        } else {
+            clearMessage.textContent = 'クリア！';
+            clearProgress.textContent = `${cur} / ${total} くりあ！`;
+            btnContinue.textContent = 'つぎのコースへ ▶';
+            setOkojoText('クリア！ すごいね！ よくできたよ！');
+        }
     } else {
-        clearMessage.textContent = 'クリア！';
-        clearProgress.textContent = isInfinite
-            ? `${cur}かいめ クリア！`
-            : `${cur} / ${total} くりあ！`;
-        btnContinue.textContent = 'つづける ▶';
+        // ステップ1〜3の回数制用クリア画面
+        State.step1CurrentRound++;
+        const total = State.step1TotalRounds;
+        const cur = State.step1CurrentRound;
+        const isInfinite = (total === 0);
+        const allDone = !isInfinite && cur >= total;
+
+        roundIndicator.textContent = isInfinite
+            ? `${cur}かいめ`
+            : `${cur} / ${total}`;
+
+        if (allDone) {
+            clearMessage.textContent = 'やった！　全部クリア！';
+            clearProgress.textContent = `${total}かい 全部できたよ！`;
+            btnContinue.textContent = 'もう1ゲーム >';
+        } else {
+            clearMessage.textContent = 'クリア！';
+            clearProgress.textContent = isInfinite
+                ? `${cur}かいめ クリア！`
+                : `${cur} / ${total} くりあ！`;
+            btnContinue.textContent = 'おなじステップをもう一度 ▶'; // 表現を他と少し分ける
+        }
+
+        setOkojoText('クリア！ すごいね！ よくできたよ！');
     }
 
-    setOkojoText('クリア！ すごいね！ よくできたよ！');
     setTimeout(() => { clearOverlay.classList.remove('hidden'); }, 800);
 }
 
