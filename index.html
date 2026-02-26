@@ -33,6 +33,9 @@
                     オコジョ<ruby>先生<rt>せんせい</rt></ruby>の<br>レールパズル
                 </h1>
                 <p class="top-sub">ステップを えらんでね！</p>
+                <div class="top-actions" style="margin-top:15px;">
+                    <button id="btn-show-achievements" class="btn-achievements">🏅 メダルを みる</button>
+                </div>
             </div>
 
             <div class="step-cards">
@@ -73,6 +76,16 @@
                     </div>
                     <div class="card-label">ステップ 4<br><span>こうさを なぞろう</span></div>
                 </button>
+                <button class="step-card" data-step="5">
+                    <div class="card-icon">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <!-- 星形のアイコン -->
+                            <polygon points="20,5 24,14 34,14 26,20 29,30 20,24 11,30 14,20 6,14 16,14" />
+                        </svg>
+                    </div>
+                    <div class="card-label">ステップ 5<br><span>こうさを なぞろう②</span></div>
+                </button>
             </div>
         </div>
 
@@ -84,32 +97,11 @@
                 <h2>⚙️ せってい</h2>
 
                 <div class="settings-section">
-                    <label class="settings-section-label">🚂 れんぞく かいすう</label>
-                    <div class="round-buttons" id="round-buttons">
-                        <button class="round-btn active" data-rounds="1">1かい</button>
-                        <button class="round-btn" data-rounds="3">3かい</button>
-                        <button class="round-btn" data-rounds="5">5かい</button>
-                        <button class="round-btn" data-rounds="0">むげん</button>
-                    </div>
-                </div>
-
-                <div class="settings-section">
-                    <label class="settings-section-label">📏 レール の ながさ</label>
+                    <label class="settings-section-label">📏 レールの ながさ（スケール）</label>
                     <div class="round-buttons" id="length-buttons">
                         <button class="length-btn active" data-length="2">ふつう (2)</button>
                         <button class="length-btn" data-length="1">みじかい (1)</button>
                         <button class="length-btn" data-length="3">ながい (3)</button>
-                    </div>
-                </div>
-
-                <div class="settings-section">
-                    <label class="settings-section-label">🧭 レール の むき</label>
-                    <div class="round-buttons" id="direction-buttons">
-                        <button class="dir-btn active" data-dir="random">ランダム</button>
-                        <button class="dir-btn" data-dir="right">右へ (→)</button>
-                        <button class="dir-btn" data-dir="left">左へ (←)</button>
-                        <button class="dir-btn" data-dir="down">下へ (↓)</button>
-                        <button class="dir-btn" data-dir="up">上へ (↑)</button>
                     </div>
                 </div>
 
@@ -196,6 +188,28 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- ============================
+             実績確認（メダルコレクション）画面
+        ============================= -->
+    <div id="screen-achievements" class="screen">
+        <header>
+            <button id="btn-achievements-back" title="トップへ戻る">🏠 もどる</button>
+            <div style="flex-grow:1; text-align:center; font-weight:bold; font-size:1.2rem;">メダル コレクション</div>
+            <div style="width:80px;"></div> <!-- バランス用のダミー -->
+        </header>
+        <main class="achievements-content">
+            <div class="achievements-header-msg">
+                あつめた メダル が ここにならぶよ！<br>
+                ぜんぶ あつめて レールマスター に なろう！
+            </div>
+
+            <div id="achievements-grid" class="achievements-grid">
+                <!-- JSで動的にメダル要素を追加 -->
+            </div>
+        </main>
+    </div>
 
     </div>
     <script src="script.js"></script>
