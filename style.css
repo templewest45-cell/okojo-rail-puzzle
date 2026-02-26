@@ -13,7 +13,7 @@
 * {
     box-sizing: border-box;
     user-select: none;
-    touch-action: none;
+    /* touch-action: none; はドラッグ領域(SVG)のみに適用させるため削除 */
 }
 
 body {
@@ -38,6 +38,7 @@ body {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
     position: relative;
     overflow: hidden;
+    /* コンテナ外への枠はみ出しだけ防ぐ */
 }
 
 /* ============================
@@ -56,6 +57,8 @@ body {
 .screen.active {
     opacity: 1;
     pointer-events: auto;
+    /* アクティブな画面は基本的にスクロール可能にする（ゲーム画面は別途ブロック） */
+    overflow-y: auto;
 }
 
 /* ============================
@@ -67,6 +70,9 @@ body {
     justify-content: center;
     padding: 30px 20px;
     gap: 20px;
+    /* トップ画面でのスクロール許可 */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .top-header {
@@ -171,6 +177,8 @@ body {
 ============================= */
 #screen-game {
     background: #fff;
+    /* ゲーム画面はパスなぞりがあるためスクロール禁止 */
+    overflow: hidden !important;
 }
 
 header {
@@ -220,6 +228,8 @@ header {
     width: 100%;
     height: 100%;
     cursor: crosshair;
+    /* パスなぞり領域のみスクロール・ズーム処理を完全にブロックする */
+    touch-action: none;
 }
 
 .rail-path {
