@@ -69,8 +69,8 @@ function showScreen(id) {
 
 // --- Game State ---
 const State = {
-    step: 1,
-    maxStep: 5,
+    currentCourse: 'A', // 'A', 'B', 'C'
+    currentStage: 1,
     isDragging: false,
     dragType: 'none',
     trainProgress: 0,
@@ -91,59 +91,63 @@ const State = {
     initialAngle: 0,
     lastTrainDragPt: null,
     trailPath: null,
-    lastTrainDragPt: null,
 
     // 共通設定
     railLength: 2,
 
-    // 各ステップのステージ用
-    step1Stage: 1,
-    maxStep1Stage: 8,
-    step2Stage: 1,
-    maxStep2Stage: 6,
-    step3Stage: 1,
-    maxStep3Stage: 6,
-    step4Stage: 1,
-    maxStep4Stage: 5,
-    step5Stage: 1,
-    maxStep5Stage: 3,
+    // コース情報
+    maxStages: {
+        'A': 11,
+        'B': 11,
+        'C': 10
+    },
 
     // 矢印ナビゲーション用
     arrows: [],
 
-    // ステップ4 複数路線管理用
-    step4Lines: [],
+    // 複数路線管理用（旧step4Lines）
+    multiLines: [],
     activeLineIndex: -1,
+
+    // 進捗管理用 (何面までクリアしたか)
+    progress: {
+        'A': 0,
+        'B': 0,
+        'C': 0
+    },
 
     // 実績管理用 (メダル)
     achievements: {
-        step1First: false, step1All: false,
-        step2First: false, step2All: false,
-        step3First: false, step3All: false,
-        step4First: false, step4All: false,
-        step5First: false, step5All: false,
+        courseAClear: false,
+        courseBClear: false,
+        courseCClear: false,
         completeAll: false
     }
 };
 
-// --- Achievements (LocalStorage) ---
-function loadAchievements() {
+// --- Progress & Achievements (LocalStorage) ---
+function loadProgress() {
     try {
-        const saved = localStorage.getItem('okojo_rail_achievements');
+        const saved = localStorage.getItem('okojo_rail_progress_v2');
         if (saved) {
             const parsed = JSON.parse(saved);
-            State.achievements = { ...State.achievements, ...parsed };
+            State.progress = { ...State.progress, ...(parsed.progress || {}) };
+            State.achievements = { ...State.achievements, ...(parsed.achievements || {}) };
         }
     } catch (e) {
-        console.error('Failed to load achievements:', e);
+        console.error('Failed to load progress:', e);
     }
 }
 
-function saveAchievements() {
+function saveProgress() {
     try {
-        localStorage.setItem('okojo_rail_achievements', JSON.stringify(State.achievements));
+        const data = {
+            progress: State.progress,
+            achievements: State.achievements
+        };
+        localStorage.setItem('okojo_rail_progress_v2', JSON.stringify(data));
     } catch (e) {
-        console.error('Failed to save achievements:', e);
+        console.error('Failed to save progress:', e);
     }
 }
 
@@ -168,18 +172,42 @@ const settingsModal = document.getElementById('settings-modal');
 const btnSettingsClose = document.getElementById('btn-settings-close');
 
 function init() {
-    loadAchievements();
+    loadProgress(); // 変更: loadAchievements()から変更
+
+    // コースCのロック判定
+    updateCourseCLockUI();
+
     renderAchievements();
 
-    // ステップカード
-    document.querySelectorAll('.step-card').forEach(card => {
+    // コースカード
+    document.querySelectorAll('.course-card').forEach(card => {
         card.addEventListener('click', () => {
             initAudio();
-            const step = parseInt(card.dataset.step);
-            showScreen('screen-game');
-            loadStep(step);
+            const course = card.dataset.course;
+
+            // コースCのロックチェック（AとBの進捗が5以上）
+            if (course === 'C') {
+                if (State.progress['A'] < 5 || State.progress['B'] < 5) {
+                    // ロックされている場合は何もしない（アラートを出してもよい）
+                    return;
+                }
+            }
+
+            State.currentCourse = course;
+            renderStageSelect(course);
+            showScreen('screen-stage-select');
         });
     });
+
+    // ステージ選択画面からトップへ戻る
+    const btnStageBack = document.getElementById('btn-stage-back');
+    if (btnStageBack) {
+        btnStageBack.addEventListener('click', () => {
+            initAudio();
+            updateCourseCLockUI(); // トップに戻る時にロック状態再評価
+            showScreen('screen-top');
+        });
+    }
 
     // レールの長さボタン
     document.querySelectorAll('.length-btn').forEach(btn => {
@@ -221,38 +249,35 @@ function init() {
     btnContinue.addEventListener('click', () => {
         clearOverlay.classList.add('hidden');
 
-        // 全ステップ共通のステージ進行処理
-        const currentStageKey = `step${State.step}Stage`;
-        const maxStageKey = `maxStep${State.step}Stage`;
+        const c = State.currentCourse;
+        const maxStage = State.maxStages[c];
 
-        if (State[currentStageKey] >= State[maxStageKey]) {
-            // 全クリ時はトップへ戻り、進捗リセット
-            State[currentStageKey] = 1;
+        if (State.currentStage >= maxStage) {
+            // コース全クリ時はステージ選択画面へ戻る
             clearCanvas();
-            showScreen('screen-top');
+            renderStageSelect(c);
+            showScreen('screen-stage-select');
         } else {
-            // 次のコースへ進む
-            State[currentStageKey]++;
-            loadStep(State.step);
+            // 次のステージへ進む
+            State.currentStage++;
+            loadCourseStage(c, State.currentStage);
         }
     });
 
-    // クリアオーバーレイ：トップへ
+    // クリアオーバーレイ：コース選択へ
     btnBackTop.addEventListener('click', () => {
         clearOverlay.classList.add('hidden');
         clearCanvas();
-        showScreen('screen-top');
+        renderStageSelect(State.currentCourse);
+        showScreen('screen-stage-select');
     });
 
+    // プレイ画面：もどる
     btnHome.addEventListener('click', () => {
         clearOverlay.classList.add('hidden');
         clearCanvas();
-        // ホームに戻ったら面進捗はすべてリセットする
-        for (let i = 1; i <= 5; i++) {
-            State[`step${i}Stage`] = 1;
-        }
-        renderAchievements();
-        showScreen('screen-top');
+        renderStageSelect(State.currentCourse);
+        showScreen('screen-stage-select');
     });
 
     // 実績確認画面へ
@@ -280,7 +305,7 @@ function init() {
 }
 
 function updateUI() {
-    stepIndicator.textContent = `ステップ ${State.step}`;
+    stepIndicator.textContent = `コース ${State.currentCourse}-${State.currentStage}`;
 }
 
 function setOkojoText(text) {
@@ -357,9 +382,76 @@ function adjustViewBoxToFitPath(pathNodes) {
     svg.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`);
 }
 
-function loadStep(stepNumber) {
+// --- Screen & Stage Navigation ---
+function updateCourseCLockUI() {
+    const btnC = document.getElementById('btn-course-c');
+    if (!btnC) return;
+    if (State.progress['A'] >= 5 && State.progress['B'] >= 5) {
+        btnC.classList.remove('locked');
+        btnC.innerHTML = `
+            <div class="card-icon">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M 5,20 L 15,10 C 25,0 40,15 30,25" />
+                    <circle cx="20" cy="20" r="10" />
+                </svg>
+            </div>
+            <div class="card-label">コースC<br><span>ミックス コース</span></div>
+        `;
+    } else {
+        btnC.classList.add('locked');
+        btnC.innerHTML = `
+            <div class="card-icon">
+                <span style="font-size: 32px">🔒</span>
+            </div>
+            <div class="card-label">コースC<br><span>ミックス コース</span></div>
+        `;
+    }
+}
+
+function renderStageSelect(course) {
+    const title = document.getElementById('stage-select-title');
+    const list = document.getElementById('stage-list');
+
+    if (course === 'A') title.textContent = 'コースA：まっすぐ';
+    else if (course === 'B') title.textContent = 'コースB：くねくね';
+    else if (course === 'C') title.textContent = 'コースC：ミックス';
+
+    list.innerHTML = '';
+    const max = State.maxStages[course];
+    const cleared = State.progress[course] || 0;
+
+    for (let i = 1; i <= max; i++) {
+        const item = document.createElement('div');
+        item.className = 'stage-item';
+
+        // 1つ先のステージまではプレイ可能
+        const isLocked = i > cleared + 1;
+        const isCleared = i <= cleared;
+
+        if (isLocked) {
+            item.classList.add('locked');
+            item.innerHTML = `
+                <span class="stage-num" style="color:#9e9e9e">${i}</span>
+                <span style="font-size: 1rem;">🔒</span>
+            `;
+        } else {
+            if (isCleared) item.classList.add('cleared');
+            item.innerHTML = `
+                <span class="stage-num">${i}</span>
+            `;
+            item.addEventListener('click', () => {
+                initAudio();
+                State.currentStage = i;
+                loadCourseStage(course, i);
+                showScreen('screen-game');
+            });
+        }
+        list.appendChild(item);
+    }
+}
+
+function loadCourseStage(course, stage) {
     clearCanvas();
-    State.step = stepNumber;
     updateUI();
     State.trainProgress = 0;
     State.isStepCompleted = false;
@@ -375,15 +467,17 @@ function loadStep(stepNumber) {
     State.draggedShape = null;
     State.trailPath = null;
     State.lastTrainDragPt = null;
+    State.multiLines = [];
+    State.activeLineIndex = -1;
 
     drawBackground();
 
-    if (stepNumber === 1) initStep1();
-    else if (stepNumber === 2) initStep2();
-    else if (stepNumber === 3) initStep3();
-    else if (stepNumber === 4) initStep4();
-    else if (stepNumber === 5) initStep5();
-    else setOkojoText(`ステップ ${stepNumber} は じゅんびちゅう だよ！`);
+    setOkojoText(`コース${course}-${stage} を じゅんび中...`);
+
+    // 各コースの初期化関数を呼ぶ（Task4で実装）
+    if (course === 'A' && typeof initCourseA === 'function') initCourseA(stage);
+    else if (course === 'B' && typeof initCourseB === 'function') initCourseB(stage);
+    else if (course === 'C' && typeof initCourseC === 'function') initCourseC(stage);
 }
 
 function drawBackground() {
@@ -509,6 +603,31 @@ function createTrailPath(pathData, totalLength) {
     return trail;
 }
 
+// ハイブリッド用描画・標識関数を削除
+
+// 座標の配列からSVGパス(d属性)と角(stops)の配列を生成するユーティリティ関数
+function buildLinePath(points) {
+    if (!points || points.length === 0) return { d: '', stops: [] };
+
+    let d = `M ${points[0][0]},${points[0][1]}`;
+    const stops = [];
+    let currentLength = 0;
+
+    for (let i = 1; i < points.length; i++) {
+        const dx = points[i][0] - points[i - 1][0];
+        const dy = points[i][1] - points[i - 1][1];
+        d += ` L ${points[i][0]},${points[i][1]}`;
+        currentLength += Math.hypot(dx, dy);
+
+        // 最後の点以外は角として停止判定ポイントを追加
+        if (i < points.length - 1) {
+            stops.push({ length: currentLength, x: points[i][0], y: points[i][1] });
+        }
+    }
+
+    return { d, stops };
+}
+
 function drawStation(x, y, color = null) {
     const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     group.setAttribute('class', 'station-group');
@@ -614,7 +733,7 @@ function setupTrainDrag(node) {
 function setupMultiTrainDrag(node, lineIndex) {
     node.addEventListener('pointerdown', e => {
         if (State.isStepCompleted || State.waitingForTap) return;
-        if (State.step4Lines[lineIndex] && State.step4Lines[lineIndex].isCompleted) return;
+        if (State.multiLines[lineIndex] && State.multiLines[lineIndex].isCompleted) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -629,443 +748,519 @@ function setupMultiTrainDrag(node, lineIndex) {
 }
 
 // ============================
-// ステップ1：直線をなぞる（ランダム次から方向発進）
+// コースA：まっすぐコース (全11ステージ)
 // ============================
-function generateStep1Path() {
-    const len = State.railLength * 200; // 1: 200, 2: 400, 3: 600
+function generateCourseAPath(stage) {
+    const scale = State.railLength === 1 ? 0.7 : (State.railLength === 3 ? 1.5 : 1.0);
     const center = { x: 400, y: 300 };
 
-    // 1〜8ステージの出題方向（右、左、下、上、右下、右上、左下、左上）
-    const angles = [
-        0,                // 1: 右
-        Math.PI,          // 2: 左
-        Math.PI / 2,      // 3: 下
-        -Math.PI / 2,     // 4: 上
-        Math.PI / 4,      // 5: 右下
-        -Math.PI / 4,     // 6: 右上
-        Math.PI * 3 / 4,  // 7: 左下
-        -Math.PI * 3 / 4  // 8: 左上
-    ];
-
-    const stageIndex = Math.max(0, Math.min(7, State.step1Stage - 1));
-    const angle = angles[stageIndex];
-
-    const startX = center.x - (len / 2) * Math.cos(angle);
-    const startY = center.y - (len / 2) * Math.sin(angle);
-    const endX = center.x + (len / 2) * Math.cos(angle);
-    const endY = center.y + (len / 2) * Math.sin(angle);
-
-    return `M ${startX},${startY} L ${endX},${endY}`;
-}
-
-function initStep1() {
-    setOkojoText(`【線をなぞろう】でんしゃ を さわって、えき まで はこんでね！ （${State.step1Stage}/${State.maxStep1Stage}）`);
-    const pathData = generateStep1Path();
-    State.currentPathNode = createRailPath(pathData);
-    State.pathLength = State.currentPathNode.getTotalLength();
-
-    // 軌跡パス（進行した分だけ光る）
-    State.trailPath = createTrailPath(pathData, State.pathLength);
-
-    const startPoint = State.currentPathNode.getPointAtLength(0);
-    const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
-    drawStation(startPoint.x, startPoint.y);
-    drawStation(endPoint.x, endPoint.y);
-
-    // 進行方向の矢印を描画
-    drawDirectionArrows(State.currentPathNode, 3);
-
-    // 見切れ防止: レール全体が収まるようSVG領域を調整
-    adjustViewBoxToFitPath(State.currentPathNode);
-
-    State.trainNode = drawTrain(startPoint.x, startPoint.y);
-    setupTrainDrag(State.trainNode);
-}
-
-// ============================
-// ステップ2：曲線をなぞる（ランダム）
-// ============================
-function generateStep2Path() {
-    const len = State.railLength * 200;
-    const center = { x: 400, y: 300 };
-
-    // 1〜6ステージの出題パターン
-    // 1: 右C (右方向へ進みつつ膨らむ)
-    // 2: 左C
-    // 3: 上C
-    // 4: 下C
-    // 5: 横S (右方向へ進むS字)
-    // 6: 縦S (下方向へ進むS字)
-    const patterns = [
-        { dir: 'right', type: 0 }, // 1
-        { dir: 'left', type: 0 }, // 2
-        { dir: 'up', type: 0 }, // 3
-        { dir: 'down', type: 0 }, // 4
-        { dir: 'right', type: 1 }, // 5
-        { dir: 'down', type: 1 }  // 6
-    ];
-
-    const stageIndex = Math.max(0, Math.min(5, State.step2Stage - 1));
-    const p = patterns[stageIndex];
-
-    const dir = p.dir;
-    const curveType = p.type; // 0: アーチ(C), 1: S字(S)
-
-    let angle = 0;
-    switch (dir) {
-        case 'right': angle = 0; break;
-        case 'left': angle = Math.PI; break;
-        case 'down': angle = Math.PI / 2; break;
-        case 'up': angle = -Math.PI / 2; break;
-    }
-
-    const startX = center.x - (len / 2) * Math.cos(angle);
-    const startY = center.y - (len / 2) * Math.sin(angle);
-    const endX = center.x + (len / 2) * Math.cos(angle);
-    const endY = center.y + (len / 2) * Math.sin(angle);
-
-    const perpAngle = angle + Math.PI / 2;
-    // 膨らみ具合（長さ設定に応じて調整）
-    const curveAmount = 100 + State.railLength * 25; // Cカーブの膨らむ方向を一定にするためMath.randomを排除
-
-    if (curveType === 0) {
-        const cx = center.x + curveAmount * Math.cos(perpAngle);
-        const cy = center.y + curveAmount * Math.sin(perpAngle);
-        return `M ${startX},${startY} Q ${cx},${cy} ${endX},${endY}`;
-    } else {
-        const d = len / 3;
-        const c1x = startX + d * Math.cos(angle) + curveAmount * Math.cos(perpAngle);
-        const c1y = startY + d * Math.sin(angle) + curveAmount * Math.sin(perpAngle);
-
-        let c2CurveAmount = -curveAmount; // S字の場合は逆側へ
-
-        const c2x = endX - d * Math.cos(angle) + c2CurveAmount * Math.cos(perpAngle);
-        const c2y = endY - d * Math.sin(angle) + c2CurveAmount * Math.sin(perpAngle);
-
-        return `M ${startX},${startY} C ${c1x},${c1y} ${c2x},${c2y} ${endX},${endY}`;
-    }
-}
-
-function initStep2() {
-    setOkojoText(`【曲線をなぞろう】くねくねレール だよ！ えき まで はこんでね！ （${State.step2Stage}/${State.maxStep2Stage}）`);
-    const pathData = generateStep2Path();
-
-    State.currentPathNode = createRailPath(pathData);
-    State.pathLength = State.currentPathNode.getTotalLength();
-    State.stops = []; // 曲線は止まらず一気に進める
-
-    // 軌跡パス
-    State.trailPath = createTrailPath(pathData, State.pathLength);
-
-    const startPoint = State.currentPathNode.getPointAtLength(0);
-    const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
-    drawStation(startPoint.x, startPoint.y);
-    drawStation(endPoint.x, endPoint.y);
-
-    // 進行方向の矢印を描画
-    drawDirectionArrows(State.currentPathNode, 3);
-
-    // 見切れ防止処理
-    adjustViewBoxToFitPath(State.currentPathNode);
-
-    State.trainNode = drawTrain(startPoint.x, startPoint.y);
-    setupTrainDrag(State.trainNode);
-}
-
-// ============================
-// ステップ3：かどに気づく（元ステップ2、ランダム）
-// ============================
-
-// 直線座標列からSVGパスと停止点を自動計算するヘルパー
-function buildLinePath(points) {
-    const d = 'M ' + points.map(p => `${p[0]},${p[1]}`).join(' L ');
-    const stops = [];
-    let cumLen = 0;
-    for (let i = 1; i < points.length - 1; i++) {
-        cumLen += Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
-        stops.push({ length: cumLen, x: points[i][0], y: points[i][1] });
-    }
-    return { d, stops };
-}
-
-function generateStep3Path() {
-    const len = State.railLength * 200;
-    const center = { x: 400, y: 300 };
-
-    const w = len * 0.8;
-    const h = len * 0.6;
-
-    const xMin = center.x - w / 2;
-    const xMax = center.x + w / 2;
-    const yMin = center.y - h / 2;
-    const yMax = center.y + h / 2;
-
-    // 1〜6ステージの出題パターン
-    // 1: 右下L (右に進んで下へ)
-    // 2: 下左L (下に進んで左へ)
-    // 3: 左上L (左に進んで上へ)
-    // 4: 上右L (上に進んで右へ)
-    // 5: 右下右Z (右→下→右)
-    // 6: 下右下Z (下→右→下)
-    const patterns = [
-        { dir: 'right', isZ: false }, // 1
-        { dir: 'down', isZ: false }, // 2
-        { dir: 'left', isZ: false }, // 3
-        { dir: 'up', isZ: false }, // 4
-        { dir: 'right', isZ: true },  // 5
-        { dir: 'down', isZ: true }   // 6
-    ];
-
-    const stageIndex = Math.max(0, Math.min(5, State.step3Stage - 1));
-    const p = patterns[stageIndex];
-    const dir = p.dir;
-    const isZShape = p.isZ;
-
-    let start, corner, end, c1, c2;
-
-    if (!isZShape) {
-        if (dir === 'right') {
-            start = [xMin, yMin];
-            corner = [xMax, yMin];
-            end = [xMax, yMax];
-        } else if (dir === 'down') {
-            start = [xMax, yMin];
-            corner = [xMax, yMax];
-            end = [xMin, yMax];
-        } else if (dir === 'left') {
-            start = [xMax, yMax];
-            corner = [xMin, yMax];
-            end = [xMin, yMin];
-        } else { // 'up'
-            start = [xMin, yMax];
-            corner = [xMin, yMin];
-            end = [xMax, yMin];
-        }
-        return [start, corner, end];
-    } else {
-        if (dir === 'right') {
-            const stepW = w / 2;
-            const stepH = h;
-            start = [xMin, yMin];
-            c1 = [center.x, yMin];
-            c2 = [center.x, yMax];
-            end = [xMax, yMax];
-        } else { // 'down'
-            const stepW = w;
-            const stepH = h / 2;
-            start = [xMin, yMin];
-            c1 = [xMin, center.y];
-            c2 = [xMax, center.y];
-            end = [xMax, yMax];
-        }
-        return [start, c1, c2, end];
-    }
-}
-
-function initStep3() {
-    setOkojoText(`【かどにきづこう】「かど」が あるよ！ レールを なぞって はこんでね！ （${State.step3Stage}/${State.maxStep3Stage}）`);
-    const pts = generateStep3Path();
-    const { d: pathData, stops } = buildLinePath(pts);
-    State.currentPathNode = createRailPath(pathData);
-    State.pathLength = State.currentPathNode.getTotalLength();
-    State.stops = []; // 角での停止判定を無効化し、一筆書きにする
-    State.trailPath = createTrailPath(pathData, State.pathLength);
-    const startPoint = State.currentPathNode.getPointAtLength(0);
-    const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
-    drawStation(startPoint.x, startPoint.y);
-    drawStation(endPoint.x, endPoint.y);
-
-    // 進行方向の矢印を描画
-    drawDirectionArrows(State.currentPathNode, 4);
-
-    // 見切れ防止処理
-    adjustViewBoxToFitPath(State.currentPathNode);
-
-    State.trainNode = drawTrain(startPoint.x, startPoint.y);
-    setupTrainDrag(State.trainNode);
-}
-
-
-// ============================
-// ステップ4：こうさ（クロス）をなぞる (複数車両・全8ステージ制)
-// ============================
-function generateStep4Path() {
-    const center = { x: 400, y: 300 };
-    const stage = State.step4Stage;
-    // レールの長さ設定 (1: みじかい, 2: ふつう, 3: ながい) に応じて全体スケールを劇的に調整
-    // 上限で頭打ちにならないようMath.minを廃止し、倍率の差を大きく取る
-    const lengthFactor = State.railLength === 1 ? 0.5 : (State.railLength === 3 ? 1.8 : 1.0);
-    // デフォルトサイズが小さすぎるという意見を受け、基本スケールを2倍に変更
-    const scale = (1.2 + (stage * 0.1)) * lengthFactor;
-
+    // stage 1: 縦の道
     if (stage === 1) {
-        // --- 1面: 十字 (2車両) ---
+        const h = 250 * scale;
+        return { type: 'single', d: `M ${center.x},${center.y - h} L ${center.x},${center.y + h}` };
+    }
+    // stage 2: 横の道
+    else if (stage === 2) {
+        const w = 250 * scale;
+        return { type: 'single', d: `M ${center.x - w},${center.y} L ${center.x + w},${center.y}` };
+    }
+    // stage 3: 十字路 (2車両)
+    else if (stage === 3) {
+        const s = 200 * scale;
+        return {
+            type: 'multi', lines: [
+                `M ${center.x},${center.y - s} L ${center.x},${center.y + s}`,
+                `M ${center.x - s},${center.y} L ${center.x + s},${center.y}`
+            ]
+        };
+    }
+    // stage 4: L字コーナー
+    else if (stage === 4) {
         const s = 150 * scale;
-        return [
-            `M ${center.x},${center.y - s} L ${center.x},${center.y + s}`, // タテ
-            `M ${center.x - s},${center.y} L ${center.x + s},${center.y}`  // ヨコ
+        const pts = [
+            [center.x - s, center.y - s],
+            [center.x - s, center.y + s],
+            [center.x + s, center.y + s]
         ];
-    } else if (stage === 2) {
-        // --- 2面: T字 (2車両) ---
-        const s = 150 * scale;
-        return [
-            `M ${center.x - s},${center.y - 50 * scale} L ${center.x + s},${center.y - 50 * scale}`, // 上部のヨコ
-            `M ${center.x},${center.y + s} L ${center.x},${center.y - 50 * scale}` // 下から上へのタテ
+        return { type: 'corner', ...buildLinePath(pts) };
+    }
+    // stage 5: コの字通路
+    else if (stage === 5) {
+        const w = 180 * scale;
+        const h = 180 * scale;
+        const pts = [
+            [center.x + w, center.y - h],
+            [center.x - w, center.y - h],
+            [center.x - w, center.y + h],
+            [center.x + w, center.y + h]
         ];
-    } else if (stage === 3) {
-        // --- 3面: 斜め交差 (X字, 2車両) ---
-        const s = 140 * scale;
-        return [
-            `M ${center.x - s},${center.y - s} L ${center.x + s},${center.y + s}`, // 左上から右下
-            `M ${center.x + s},${center.y - s} L ${center.x - s},${center.y + s}`  // 右上から左下
+        return { type: 'corner', ...buildLinePath(pts) };
+    }
+    // stage 6: 四角のお部屋 (口形)
+    else if (stage === 6) {
+        const s = 180 * scale;
+        const pts = [
+            [center.x - s, center.y - s],
+            [center.x + s, center.y - s],
+            [center.x + s, center.y + s],
+            [center.x - s, center.y + s],
+            [center.x - s, center.y - s]
         ];
-    } else if (stage === 4) {
-        // --- 4面: キ (3車両) ---
+        return { type: 'corner', ...buildLinePath(pts) };
+    }
+    // stage 7: 階段迷路
+    else if (stage === 7) {
+        const s = 80 * scale;
+        const pts = [
+            [center.x - s * 2, center.y - s * 3],
+            [center.x - s, center.y - s * 3],
+            [center.x - s, center.y - s],
+            [center.x + s, center.y - s],
+            [center.x + s, center.y + s],
+            [center.x + s * 3, center.y + s]
+        ];
+        return { type: 'corner', ...buildLinePath(pts) };
+    }
+    // stage 8: 斜めの道
+    else if (stage === 8) {
+        const s = 200 * scale;
+        return { type: 'single', d: `M ${center.x - s},${center.y - s} L ${center.x + s},${center.y + s}` };
+    }
+    // stage 9: バツ印の交差点 (2車両)
+    else if (stage === 9) {
+        const s = 200 * scale;
+        return {
+            type: 'multi', lines: [
+                `M ${center.x - s},${center.y - s} L ${center.x + s},${center.y + s}`,
+                `M ${center.x + s},${center.y - s} L ${center.x - s},${center.y + s}`
+            ]
+        };
+    }
+    // stage 10: 鋭角ターン (V字)
+    else if (stage === 10) {
+        const w = 150 * scale;
+        const h = 200 * scale;
+        const pts = [
+            [center.x - w, center.y - h],
+            [center.x, center.y + h],
+            [center.x + w, center.y - h]
+        ];
+        return { type: 'corner', ...buildLinePath(pts) };
+    }
+    // stage 11: 三角のお部屋
+    else if (stage === 11) {
+        const r = 220 * scale;
+        const pts = [];
+        for (let i = 0; i <= 3; i++) {
+            const angle = -Math.PI / 2 + (i * 120) * (Math.PI / 180);
+            pts.push([
+                center.x + r * Math.cos(angle),
+                center.y + r * Math.sin(angle)
+            ]);
+        }
+        return { type: 'corner', ...buildLinePath(pts) };
+    }
+
+    return { type: 'single', d: `M 100,300 L 700,300` };
+}
+
+function initCourseA(stage) {
+    const stageNames = [
+        'たての道', 'よこの道', '十字路', 'L字コーナー', 'コの字通路',
+        '四角のお部屋', 'かいだん迷路', 'ななめの道', 'バツ印の交差点',
+        '鋭角ターン', '三角のお部屋'
+    ];
+    setOkojoText(`【${stageNames[stage - 1] || '？'}】 えきまで はこんでね！`);
+
+    const pathInfo = generateCourseAPath(stage);
+
+    if (pathInfo.type === 'multi') {
+        const pathsData = pathInfo.lines;
+        State.multiLines = [];
+        State.activeLineIndex = -1;
+        const colors = ['#E91E63', '#2196F3', '#4CAF50', '#FF9800'];
+
+        pathsData.forEach((pathData, index) => {
+            const pathNode = createRailPath(pathData);
+            const pathLength = pathNode.getTotalLength();
+            const trailPath = createTrailPath(pathData, pathLength);
+            const startPoint = pathNode.getPointAtLength(0);
+            const endPoint = pathNode.getPointAtLength(pathLength);
+            const color = colors[index % colors.length];
+
+            drawStation(startPoint.x, startPoint.y, color);
+            drawStation(endPoint.x, endPoint.y, color);
+
+            const lineObj = {
+                pathNode: pathNode, pathLength: pathLength, trailPath: trailPath,
+                trainNode: null, trainProgress: 0, isCompleted: false,
+            };
+            State.multiLines.push(lineObj);
+
+            drawDirectionArrows(pathNode, 4, color, index);
+            const trainNode = drawTrain(startPoint.x, startPoint.y, color);
+            lineObj.trainNode = trainNode;
+            setupMultiTrainDrag(trainNode, index);
+        });
+
+        adjustViewBoxToFitPath(State.multiLines.map(l => l.pathNode));
+    } else {
+        const pathData = pathInfo.d;
+        State.currentPathNode = createRailPath(pathData);
+        State.pathLength = State.currentPathNode.getTotalLength();
+
+        // 直線で角があるコースは角での停止を入れる
+        State.stops = pathInfo.type === 'corner' ? pathInfo.stops : [];
+        State.trailPath = createTrailPath(pathData, State.pathLength);
+
+        const startPoint = State.currentPathNode.getPointAtLength(0);
+        const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
+        drawStation(startPoint.x, startPoint.y);
+        drawStation(endPoint.x, endPoint.y);
+
+        drawDirectionArrows(State.currentPathNode, 4);
+        adjustViewBoxToFitPath(State.currentPathNode);
+
+        State.trainNode = drawTrain(startPoint.x, startPoint.y);
+        setupTrainDrag(State.trainNode);
+    }
+}
+
+// ============================
+// コースB：くねくねコース (全11ステージ)
+// ============================
+function generateCourseBPath(stage) {
+    const scale = State.railLength === 1 ? 0.7 : (State.railLength === 3 ? 1.5 : 1.0);
+    const center = { x: 400, y: 300 };
+
+    // B-1: 大きなカーブ (C)
+    if (stage === 1) {
+        const r = 200 * scale;
+        return `M ${center.x},${center.y - r} A ${r},${r} 0 0,0 ${center.x},${center.y + r}`;
+    }
+    // B-2: まるいお部屋 (〇)
+    else if (stage === 2) {
+        const r = 200 * scale;
+        return `M ${center.x},${center.y - r} A ${r},${r} 0 1,0 ${center.x},${center.y + r} A ${r},${r} 0 1,0 ${center.x},${center.y - r}`;
+    }
+    // B-3: ゆるやかな波線 (〰)
+    else if (stage === 3) {
+        const w = 250 * scale;
+        const h = 80 * scale;
+        return `M ${center.x - w},${center.y} Q ${center.x - w / 2},${center.y - h} ${center.x},${center.y} Q ${center.x + w / 2},${center.y + h} ${center.x + w},${center.y}`;
+    }
+    // B-4: 大きなU字ターン (U字単体)
+    else if (stage === 4) {
         const w = 150 * scale;
         const h = 180 * scale;
-        return [
-            `M ${center.x - w},${center.y - 60 * scale} L ${center.x + w},${center.y - 60 * scale}`, // 上ヨコ
-            `M ${center.x - w},${center.y + 20 * scale} L ${center.x + w},${center.y + 20 * scale}`, // 中ヨコ
-            `M ${center.x},${center.y - h} L ${center.x},${center.y + h}` // タテ
-        ];
-    } else if (stage === 5) {
-        // --- 5面: 井 (4車両) ---
-        const w = 160 * scale;
-        const h = 160 * scale;
-        const offset = 60 * scale;
-        return [
-            `M ${center.x - offset},${center.y - h} L ${center.x - offset},${center.y + h}`, // 左タテ
-            `M ${center.x + offset},${center.y - h} L ${center.x + offset},${center.y + h}`, // 右タテ
-            `M ${center.x - w},${center.y - offset} L ${center.x + w},${center.y - offset}`, // 上ヨコ
-            `M ${center.x - w},${center.y + offset} L ${center.x + w},${center.y + offset}`  // 下ヨコ
-        ];
+        return `M ${center.x - w},${center.y - h} L ${center.x - w},${center.y + h - w} A ${w},${w} 0 0,0 ${center.x + w},${center.y + h - w} L ${center.x + w},${center.y - h}`;
     }
-}
+    // B-5: U字ターンの連続 (蛇行)
+    else if (stage === 5) {
+        const w = 150 * scale;
+        const h = 180 * scale;
+        return `M ${center.x - w * 1.5},${center.y - h} 
+                L ${center.x - w * 1.5},${center.y + h} 
+                A ${w * 0.5},${w * 0.5} 0 0,0 ${center.x - w * 0.5},${center.y + h}
+                L ${center.x - w * 0.5},${center.y - h}
+                A ${w * 0.5},${w * 0.5} 0 0,1 ${center.x + w * 0.5},${center.y - h}
+                L ${center.x + w * 0.5},${center.y + h}
+                A ${w * 0.5},${w * 0.5} 0 0,0 ${center.x + w * 1.5},${center.y + h}
+                L ${center.x + w * 1.5},${center.y - h}`;
+    }
+    // B-6: S字カーブ (S)
+    else if (stage === 6) {
+        const r = 120 * scale;
+        return `M ${center.x},${center.y - r * 2} 
+                A ${r},${r} 0 1,0 ${center.x},${center.y} 
+                A ${r},${r} 0 1,1 ${center.x},${center.y + r * 2}`;
+    }
+    // B-7: 連続S字 (くねくね迷路)
+    else if (stage === 7) {
+        const w = 350 * scale;
+        const h = 100 * scale;
+        return `M ${center.x - w},${center.y} 
+                C ${center.x - w * 0.5},${center.y - h * 2} ${center.x - w * 0.5},${center.y + h * 2} ${center.x},${center.y} 
+                C ${center.x + w * 0.5},${center.y - h * 2} ${center.x + w * 0.5},${center.y + h * 2} ${center.x + w},${center.y}`;
+    }
+    // B-8〜11: ループ (1回〜4回)
+    else if (stage >= 8 && stage <= 11) {
+        const numLoops = stage - 7; // 1, 2, 3, 4
+        // 全体の幅を調整
+        const loopWidth = 250 * scale;
+        const totalWidth = numLoops * loopWidth;
+        const startX = center.x - (totalWidth / 2) - 50 * scale;
 
-// ============================
-// ステップ5：こうさを なぞろう② (1筆書きの複雑な図形)
-// ============================
-function generateStep5Path() {
-    const center = { x: 400, y: 300 };
-    const stage = State.step5Stage;
-    const lengthFactor = State.railLength === 1 ? 0.5 : (State.railLength === 3 ? 1.8 : 1.0);
-    // デフォルトサイズが小さすぎるという意見を受け、基本スケールを2倍に変更
-    const scale = (1.2 + (stage * 0.2)) * lengthFactor;
-
-    if (stage === 1) {
-        // --- 1面: 4の字 (1筆書き) ---
-        const w = 140 * scale;
-        const h = 140 * scale;
-        return `M ${center.x + w / 2},${center.y + h / 2} L ${center.x - w / 2},${center.y + h / 2} L ${center.x},${center.y - h} L ${center.x},${center.y + h}`;
-    } else if (stage === 2) {
-        // --- 2面: 星型 (☆, 1筆書き) ---
-        const r = 160 * scale;
-        const pts = [];
-        for (let i = 0; i <= 5; i++) {
-            const angle = -Math.PI / 2 + (i * 144) * (Math.PI / 180);
-            pts.push({
-                x: center.x + r * Math.cos(angle),
-                y: center.y + r * Math.sin(angle)
-            });
+        let d = `M ${startX},${center.y} `;
+        for (let i = 0; i < numLoops; i++) {
+            const bx = startX + 50 * scale + i * loopWidth;
+            // 右へ進みつつ、バックして上に大きなループを作ってまた右へ
+            d += `C ${bx + 200 * scale},${center.y} ${bx + 200 * scale},${center.y - 250 * scale} ${bx + 125 * scale},${center.y - 250 * scale} `;
+            d += `C ${bx + 50 * scale},${center.y - 250 * scale} ${bx + 50 * scale},${center.y} ${bx + 250 * scale},${center.y} `;
         }
-        return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y} L ${pts[2].x},${pts[2].y} L ${pts[3].x},${pts[3].y} L ${pts[4].x},${pts[4].y} L ${pts[5].x},${pts[5].y}`;
-    } else {
-        // --- 3面: 8の字 (無限大, 1筆書き) ---
-        const w = 180 * scale;
-        const h = 120 * scale;
-        return `M ${center.x},${center.y} C ${center.x + w},${center.y - h} ${center.x + w},${center.y + h} ${center.x},${center.y} C ${center.x - w},${center.y - h} ${center.x - w},${center.y + h} ${center.x},${center.y}`;
+        return d;
     }
+
+    return `M 100,300 L 700,300`;
 }
 
-function initStep5() {
-    const stageNames = ['4の字', '星', '8の字'];
-    const stageName = stageNames[State.step5Stage - 1];
-    setOkojoText(`【${stageName}】こうさを なぞろう！ （${State.step5Stage}/${State.maxStep5Stage}）`);
+function initCourseB(stage) {
+    const stageNames = [
+        '大きなカーブ',    // 1
+        'まるいお部屋',    // 2
+        'ゆるやかな波線',  // 3
+        '大きなU字ターン', // 4
+        'U字ターンの連続', // 5
+        'S字カーブ',      // 6
+        '連続S字',        // 7
+        '一回転ループ',    // 8
+        '2れんぞくループ',  // 9
+        '3れんぞくループ',  // 10
+        '4れんぞくループ'   // 11
+    ];
+    setOkojoText(`【${stageNames[stage - 1] || '？'}】 くねくねレールだよ！`);
 
-    const pathData = generateStep5Path();
-
+    const pathData = generateCourseBPath(stage);
     State.currentPathNode = createRailPath(pathData);
     State.pathLength = State.currentPathNode.getTotalLength();
-    State.stops = []; // 角での停止判定を無効化し、一筆書きにする
+    State.stops = []; // Bコースは流暢性重視のため基本ノンストップ一筆書き
     State.trailPath = createTrailPath(pathData, State.pathLength);
 
     const startPoint = State.currentPathNode.getPointAtLength(0);
     const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
-    drawStation(startPoint.x, startPoint.y, '#E91E63');
-    drawStation(endPoint.x, endPoint.y, '#E91E63');
+    drawStation(startPoint.x, startPoint.y);
+    drawStation(endPoint.x, endPoint.y);
 
-    // 進行方向の矢印
-    drawDirectionArrows(State.currentPathNode, 4, '#E91E63');
-
-    // サイズがはみ出ないように全体をフィットさせる
+    drawDirectionArrows(State.currentPathNode, 4);
     adjustViewBoxToFitPath(State.currentPathNode);
 
-    State.trainNode = drawTrain(startPoint.x, startPoint.y, '#E91E63');
+    State.trainNode = drawTrain(startPoint.x, startPoint.y);
     setupTrainDrag(State.trainNode);
 }
 
-function initStep4() {
-    const stageNames = ['十字', 'T字', '斜め交差', 'キ', '井', '4の字', '星', '8の字'];
-    const stageName = stageNames[State.step4Stage - 1];
-    if (State.step4Stage <= 5) {
-        setOkojoText(`【${stageName}】でんしゃ を それぞれの えき に はこんでね！ （${State.step4Stage}/${State.maxStep4Stage}）`);
-    } else {
-        setOkojoText(`【${stageName}】こうさを なぞろう！ （${State.step4Stage}/${State.maxStep4Stage}）`);
+// ============================
+// コースC：ミックスコース (全7ステージ)
+// ============================
+function generateCourseCPath(stage) {
+    const scale = State.railLength === 1 ? 0.7 : (State.railLength === 3 ? 1.5 : 1.0);
+    const center = { x: 400, y: 300 };
+
+    // C-1: かまぼこ・D字 (D) - 2ストローク
+    if (stage === 1) {
+        const h = 180 * scale;
+        const w = 150 * scale;
+        return {
+            type: 'multi',
+            lines: [
+                `M ${center.x - w},${center.y - h} A ${h},${h} 0 0,1 ${center.x - w},${center.y + h}`, // 曲線
+                `M ${center.x - w},${center.y - h} L ${center.x - w},${center.y + h}` // 縦線 (直線)
+            ]
+        };
+    }
+    // C-2: 「２」の字ルート (通常レール)
+    else if (stage === 2) {
+        const r = 120 * scale; // 半円の半径
+        const w = 200 * scale; // 水平直線の長さ
+
+        const pts = [
+            { x: center.x - r, y: center.y - r },       // Start
+            { x: center.x + r, y: center.y - r },       // End of curve (top semicircle)
+            { x: center.x - r, y: center.y + r },       // Corner 1
+            { x: center.x - r + w, y: center.y + r }    // End
+        ];
+
+        const d = `M ${pts[0].x},${pts[0].y} A ${r},${r} 0 0,1 ${pts[1].x},${pts[1].y} L ${pts[2].x},${pts[2].y} L ${pts[3].x},${pts[3].y}`;
+        const curveLength = Math.PI * r;
+        const line1Dist = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+
+        return { type: 'mixed', d: d, stops: [{ length: curveLength + line1Dist, x: pts[2].x, y: pts[2].y }] };
+    }
+    // C-3: 「の」の始点が伸びた形 (旧C-10)
+    else if (stage === 3) {
+        const r = 170 * scale;
+        const loopCx = center.x;
+        const loopCy = center.y + 40 * scale;
+        const topX = loopCx;
+        const topY = loopCy - r - 150 * scale;
+        const entryX = loopCx;
+        const entryY = loopCy - r;
+        const noPt = (deg) => ({
+            x: loopCx + r * Math.cos(deg * Math.PI / 180),
+            y: loopCy + r * Math.sin(deg * Math.PI / 180)
+        });
+        const np1 = noPt(0);
+        const np2 = noPt(90);
+        const np3 = noPt(180);
+        const np4 = noPt(200);
+        const d3 = `M ${topX},${topY} L ${entryX},${entryY} ` +
+            `A ${r},${r} 0 0,1 ${np1.x},${np1.y} ` +
+            `A ${r},${r} 0 0,1 ${np2.x},${np2.y} ` +
+            `A ${r},${r} 0 0,1 ${np3.x},${np3.y} ` +
+            `A ${r},${r} 0 0,1 ${np4.x},${np4.y}`;
+        return { type: 'mixed', d: d3 };
+    }
+    // C-4: 「５」の字 (旧C-3)
+    else if (stage === 4) {
+        const w = 150 * scale;
+        const h = 100 * scale;
+        const r = 130 * scale;
+        const ptTopLeft = { x: center.x - w / 2, y: center.y - h - r };
+        const ptMidLeft = { x: center.x - w / 2, y: center.y - r };
+        const endPt = { x: center.x - w / 2 - r * 0.5, y: center.y + r * 0.8 };
+        const d1 = `M ${ptTopLeft.x},${ptTopLeft.y} L ${ptMidLeft.x},${ptMidLeft.y} A ${r},${r} 0 1,1 ${endPt.x},${endPt.y}`;
+        const d2 = `M ${ptTopLeft.x},${ptTopLeft.y} L ${center.x + w * 0.8},${ptTopLeft.y}`;
+        return { type: 'multi', lines: [d2, d1] };
+    }
+    // C-5: 「て」の字 (旧C-4)
+    else if (stage === 5) {
+        const w = 180 * scale;
+        const h = 80 * scale;
+        const pts = [
+            { x: center.x - w, y: center.y - h },
+            { x: center.x + w / 2, y: center.y - h * 2 }
+        ];
+        const endPt = { x: center.x - w * 0.8, y: center.y + h * 2 };
+        const d = `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y} Q ${center.x + w * 1.2},${center.y + h * 1.5} ${endPt.x},${endPt.y}`;
+        const line1Dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        return { type: 'mixed', d: d, stops: [{ length: line1Dist, x: pts[1].x, y: pts[1].y }] };
+    }
+    // C-6: カプセル型 (旧C-5)
+    else if (stage === 6) {
+        const w = 120 * scale;
+        const h = 180 * scale;
+        return { type: 'mixed', d: `M ${center.x - w},${center.y + h} L ${center.x - w},${center.y - h} A ${w},${w} 0 0,1 ${center.x + w},${center.y - h} L ${center.x + w},${center.y + h} A ${w},${w} 0 0,1 ${center.x - w},${center.y + h}` };
+    }
+    // C-7: 雪だるま (旧C-6)
+    else if (stage === 7) {
+        const r1 = 100 * scale;
+        const r2 = 130 * scale;
+        const gap = 50 * scale;
+        const totalHeight = (r1 * 2) + gap + (r2 * 2);
+        const topY = center.y - (totalHeight / 2);
+        const cy1 = topY + r1;
+        const cy2 = cy1 + r1 + gap + r2;
+        const d1_cw = `M ${center.x},${cy1 - r1} A ${r1},${r1} 0 1,1 ${center.x},${cy1 + r1} A ${r1},${r1} 0 1,1 ${center.x},${cy1 - r1}`;
+        const d1_ccw = `M ${center.x},${cy1 - r1} A ${r1},${r1} 0 1,0 ${center.x},${cy1 + r1} A ${r1},${r1} 0 1,0 ${center.x},${cy1 - r1}`;
+        const d2_cw = `M ${center.x},${cy2 - r2} A ${r2},${r2} 0 1,1 ${center.x},${cy2 + r2} A ${r2},${r2} 0 1,1 ${center.x},${cy2 - r2}`;
+        const d2_ccw = `M ${center.x},${cy2 - r2} A ${r2},${r2} 0 1,0 ${center.x},${cy2 + r2} A ${r2},${r2} 0 1,0 ${center.x},${cy2 - r2}`;
+        return { type: 'multi', lines: [{ d: d2_cw, reverseD: d2_ccw }, { d: d1_cw, reverseD: d1_ccw }] };
+    }
+    // C-8: 横並びの２つの丸 (旧C-7)
+    else if (stage === 8) {
+        const r1 = 140 * scale;
+        const r2 = 140 * scale;
+        const gap = 80 * scale;
+        const totalWidth = (r1 * 2) + gap + (r2 * 2);
+        const leftX = center.x - (totalWidth / 2);
+        const cx1 = leftX + r1;
+        const cx2 = cx1 + r1 + gap + r2;
+        const d1_cw = `M ${cx1},${center.y - r1} A ${r1},${r1} 0 1,1 ${cx1},${center.y + r1} A ${r1},${r1} 0 1,1 ${cx1},${center.y - r1}`;
+        const d1_ccw = `M ${cx1},${center.y - r1} A ${r1},${r1} 0 1,0 ${cx1},${center.y + r1} A ${r1},${r1} 0 1,0 ${cx1},${center.y - r1}`;
+        const d2_cw = `M ${cx2},${center.y - r2} A ${r2},${r2} 0 1,1 ${cx2},${center.y + r2} A ${r2},${r2} 0 1,1 ${cx2},${center.y - r2}`;
+        const d2_ccw = `M ${cx2},${center.y - r2} A ${r2},${r2} 0 1,0 ${cx2},${center.y + r2} A ${r2},${r2} 0 1,0 ${cx2},${center.y - r2}`;
+        return { type: 'multi', lines: [{ d: d1_cw, reverseD: d1_ccw }, { d: d2_cw, reverseD: d2_ccw }] };
+    }
+    // C-9: 縦の８の字 (始点上)
+    else if (stage === 9) {
+        const cx = center.x, cy = center.y;
+        const w = 170 * scale, h = 260 * scale;
+        // 上の頂点から時計回りに8字をトレース
+        const fwd = `M ${cx},${cy - h} ` +
+            `C ${cx + w},${cy - h} ${cx + w},${cy} ${cx},${cy} ` +  // 上ループ右下半
+            `C ${cx + w},${cy} ${cx + w},${cy + h} ${cx},${cy + h} ` + // 下ループ右下半
+            `C ${cx - w},${cy + h} ${cx - w},${cy} ${cx},${cy} ` +  // 下ループ左上半
+            `C ${cx - w},${cy} ${cx - w},${cy - h} ${cx},${cy - h}`; // 上ループ左上半
+        const rev = `M ${cx},${cy - h} ` +
+            `C ${cx - w},${cy - h} ${cx - w},${cy} ${cx},${cy} ` +
+            `C ${cx - w},${cy} ${cx - w},${cy + h} ${cx},${cy + h} ` +
+            `C ${cx + w},${cy + h} ${cx + w},${cy} ${cx},${cy} ` +
+            `C ${cx + w},${cy} ${cx + w},${cy - h} ${cx},${cy - h}`;
+        return { type: 'multi', lines: [{ d: fwd, reverseD: rev }] };
+    }
+    // C-10: 横の８の字/∞ (交差点スタート)
+    else if (stage === 10) {
+        const cx = center.x, cy = center.y;
+        const w = 350 * scale, h = 320 * scale;
+        // 交差点(中央)から右ループ→左ループの順で∞をトレース
+        const fwd = `M ${cx},${cy} C ${cx + w},${cy - h} ${cx + w},${cy + h} ${cx},${cy} C ${cx - w},${cy - h} ${cx - w},${cy + h} ${cx},${cy}`;
+        const rev = `M ${cx},${cy} C ${cx - w},${cy + h} ${cx - w},${cy - h} ${cx},${cy} C ${cx + w},${cy + h} ${cx + w},${cy - h} ${cx},${cy}`;
+        return { type: 'multi', lines: [{ d: fwd, reverseD: rev }] };
     }
 
-    const pathsData = generateStep4Path();
 
-    State.step4Lines = [];
-    State.activeLineIndex = -1;
-    const colors = ['#E91E63', '#2196F3', '#4CAF50', '#FF9800']; // ピンク, 青, 緑, オレンジ
+    return { type: 'mixed', d: `M 100,300 L 700,300` };
+}
 
-    pathsData.forEach((pathData, index) => {
-        const pathNode = createRailPath(pathData);
-        const pathLength = pathNode.getTotalLength();
-        const trailPath = createTrailPath(pathData, pathLength);
 
-        const startPoint = pathNode.getPointAtLength(0);
-        const endPoint = pathNode.getPointAtLength(pathLength);
+function initCourseC(stage) {
+    const stageNames = [
+        'かまぼこ・D字', '「２」の字', '「の」の始点が伸びた形',
+        '「５」の字', '「て」の字', '角の丸い四角・カプセル型',
+        '２つの丸・雪だるま', '横並びの２つの丸',
+        '縦の８の字', '横の８の字(∞)', '離れた十字とC'
+    ];
+    setOkojoText(`【${stageNames[stage - 1] || '？'}】 ミックスレールだよ！ むずかしいぞ！`);
 
-        const isMultiLine = pathsData.length > 1;
-        const color = isMultiLine ? colors[index % colors.length] : undefined;
+    const pathInfo = generateCourseCPath(stage);
 
-        drawStation(startPoint.x, startPoint.y, color);
-        drawStation(endPoint.x, endPoint.y, color);
+    if (pathInfo.type === 'multi') {
+        const pathsData = pathInfo.lines;
+        State.multiLines = [];
+        State.activeLineIndex = -1;
+        const colors = ['#00BCD4', '#FF5722', '#9C27B0', '#FFEB3B'];
 
-        const lineObj = {
-            pathNode: pathNode,
-            pathLength: pathLength,
-            trailPath: trailPath,
-            trainNode: null,
-            trainProgress: 0,
-            isCompleted: false,
-        };
-        State.step4Lines.push(lineObj);
+        pathsData.forEach((pathItem, index) => {
+            const isObj = typeof pathItem === 'object';
+            const pathData = isObj ? pathItem.d : pathItem;
+            const reverseData = isObj ? pathItem.reverseD : null;
 
-        drawDirectionArrows(pathNode, 4, color || '#E91E63', index);
+            const pathNode = createRailPath(pathData);
+            const pathLength = pathNode.getTotalLength();
+            const trailPath = createTrailPath(pathData, pathLength);
+            const startPoint = pathNode.getPointAtLength(0);
+            const endPoint = pathNode.getPointAtLength(pathLength);
+            const color = colors[index % colors.length];
 
-        const trainNode = drawTrain(startPoint.x, startPoint.y, color);
-        lineObj.trainNode = trainNode;
+            drawStation(startPoint.x, startPoint.y, color);
+            drawStation(endPoint.x, endPoint.y, color);
 
-        // ドラッグ設定
-        if (isMultiLine) {
+            const lineObj = {
+                pathNode: pathNode, pathLength: pathLength, trailPath: trailPath,
+                trainNode: null, trainProgress: 0, isCompleted: false,
+                pathData: pathData, reverseData: reverseData, isReversed: false
+            };
+            State.multiLines.push(lineObj);
+
+            // 逆方向可能な面(円など)は矢印を描画しないことでどちらでも描けるように見せる
+            if (!reverseData) {
+                drawDirectionArrows(pathNode, 4, color, index);
+            }
+            const trainNode = drawTrain(startPoint.x, startPoint.y, color);
+            lineObj.trainNode = trainNode;
             setupMultiTrainDrag(trainNode, index);
-        } else {
-            // 後半ステージは従来の変数(State.trainNode等)に依存している部分の互換性を持たせるため
-            State.trainNode = trainNode;
-            State.currentPathNode = pathNode;
-            State.pathLength = pathLength;
-            State.trailPath = trailPath;
-            State.stops = [];
-            setupTrainDrag(trainNode);
-        }
-    });
+        });
 
-    if (State.step4Lines.length > 0) {
-        // 全ての描画パスの配列を渡して、表示領域が全体にフィットするように計算する
-        const allPaths = State.step4Lines.map(line => line.pathNode);
-        adjustViewBoxToFitPath(allPaths);
+        adjustViewBoxToFitPath(State.multiLines.map(l => l.pathNode));
+    } else {
+        const pathData = pathInfo.d;
+        State.currentPathNode = createRailPath(pathData);
+        State.pathLength = State.currentPathNode.getTotalLength();
+
+        // 停止点が設定されている場合はストップ配列を使用
+        State.stops = pathInfo.stops || [];
+        State.trailPath = createTrailPath(pathData, State.pathLength);
+
+        const startPoint = State.currentPathNode.getPointAtLength(0);
+        const endPoint = State.currentPathNode.getPointAtLength(State.pathLength);
+        const mainColor = '#9C27B0'; // Cコースの単線は紫
+        drawStation(startPoint.x, startPoint.y, mainColor);
+        drawStation(endPoint.x, endPoint.y, mainColor);
+
+        drawDirectionArrows(State.currentPathNode, 4, mainColor);
+        adjustViewBoxToFitPath(State.currentPathNode);
+
+        State.trainNode = drawTrain(startPoint.x, startPoint.y, mainColor);
+        setupTrainDrag(State.trainNode);
     }
 }
 
@@ -1114,12 +1309,12 @@ function drawDirectionArrows(pathNode, numArrows = 4, color = '#E91E63', lineInd
     // レールレイヤーに追加（電車の下）
     layerRails.appendChild(arrowGroup);
 
-    // ステップ4の複数路線の場合は線のデータに紐づけ、それ以外はState.arrowsに入れる
-    if (lineIndex >= 0 && State.step4Lines) {
-        if (!State.step4Lines[lineIndex].arrows) {
-            State.step4Lines[lineIndex].arrows = [];
+    // 複数路線の場合は線のデータに紐づけ、それ以外はState.arrowsに入れる
+    if (lineIndex >= 0 && State.multiLines) {
+        if (!State.multiLines[lineIndex].arrows) {
+            State.multiLines[lineIndex].arrows = [];
         }
-        State.step4Lines[lineIndex].arrows = createdArrows;
+        State.multiLines[lineIndex].arrows = createdArrows;
     } else {
         State.arrows = createdArrows;
     }
@@ -1227,9 +1422,9 @@ function onPointerMove(e) {
         let trailPath = State.trailPath;
         let arrows = State.arrows;
 
-        const isMultiLine = State.activeLineIndex >= 0 && State.step4Lines;
+        const isMultiLine = State.activeLineIndex >= 0 && State.multiLines;
         if (isMultiLine) {
-            const lineData = State.step4Lines[State.activeLineIndex];
+            const lineData = State.multiLines[State.activeLineIndex];
             if (lineData.isCompleted) return;
             currentPathNode = lineData.pathNode;
             pathLength = lineData.pathLength;
@@ -1243,9 +1438,50 @@ function onPointerMove(e) {
 
         State.lastTrainDragPt = pt;
 
+        // --- どちら回りでも可能にするためのパス動的反転判定 ---
+        if (isMultiLine) {
+            const lineObj = State.multiLines[State.activeLineIndex];
+            // まだ反転しておらず、逆方向データがあり、スタート直後(進行度15未満)の場合のみ判定
+            if (lineObj.reverseData && !lineObj.isReversed && lineObj.trainProgress < 15) {
+                // 仮のパスを作って逆方向への距離を計る
+                const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                tempPath.setAttribute('d', lineObj.reverseData);
+
+                let minDistRev = Infinity;
+                let minDistFwd = Infinity;
+
+                for (let l = 0; l <= 150; l += 5) {
+                    const pRev = tempPath.getPointAtLength(l);
+                    const distRev = Math.hypot(pRev.x - pt.x, pRev.y - pt.y);
+                    if (distRev < minDistRev) minDistRev = distRev;
+
+                    const pFwd = currentPathNode.getPointAtLength(l);
+                    const distFwd = Math.hypot(pFwd.x - pt.x, pFwd.y - pt.y);
+                    if (distFwd < minDistFwd) minDistFwd = distFwd;
+                }
+
+                // 明らかに逆方向へ指が動いている場合 (FwdよりRevの方が近く、かつFwdから一定以上離れた)
+                if (minDistRev < minDistFwd && minDistFwd > 15 && minDistRev < 40) {
+                    lineObj.isReversed = true;
+                    const oldD = lineObj.pathData;
+                    const newD = lineObj.reverseData;
+
+                    // DOM上の該当する古いパスをすべて新しい反転パスに置換 (レール、マスク、軌跡など)
+                    const elements = document.getElementById('game-svg').querySelectorAll('path');
+                    elements.forEach(el => {
+                        if (el.hasAttribute('d') && el.getAttribute('d') === oldD) {
+                            el.setAttribute('d', newD);
+                        }
+                    });
+
+                    lineObj.pathData = newD;
+                }
+            }
+        }
+
         // 進行判定を「軌跡接線への投影」から「ローカル範囲での近傍点スナップ」に変更
         // 星形のような鋭角交差でも引っかからず自然に曲がれるよう、進行方向（前方）の探索範囲を広げる
-        const searchBackward = 30;   // 後退の許容範囲
+        const searchBackward = 200;  // 後退の許容範囲 (逆走しやすく拡張)
         const searchForward = 200;   // 前進のしやすさ・カーブの許容度
         const searchStart = Math.max(0, trainProgress - searchBackward);
         const searchEnd = Math.min(pathLength, trainProgress + searchForward);
@@ -1272,23 +1508,12 @@ function onPointerMove(e) {
 
         nextProgress = Math.max(0, Math.min(pathLength, nextProgress));
 
-        // ストップポイントチェック
-        if (!isMultiLine && State.stops && State.stops.length > State.currentStopIndex) {
-            const nextStop = State.stops[State.currentStopIndex];
-            if (trainProgress <= nextStop.length && nextProgress >= nextStop.length - 5) {
-                nextProgress = nextStop.length;
-                try { trainNode.releasePointerCapture(e.pointerId); } catch (ex) { }
-                State.waitingForTap = true;
-                State.isDragging = false;
-                trainNode.classList.remove('active');
-                showCornerPrompt(nextStop);
-            }
-        }
+
 
         trainProgress = nextProgress;
 
         if (isMultiLine) {
-            State.step4Lines[State.activeLineIndex].trainProgress = trainProgress;
+            State.multiLines[State.activeLineIndex].trainProgress = trainProgress;
         } else {
             State.trainProgress = trainProgress;
         }
@@ -1326,10 +1551,10 @@ function onPointerMove(e) {
             trainNode.setAttribute('transform', `translate(${endP.x}, ${endP.y})`);
 
             if (isMultiLine) {
-                State.step4Lines[State.activeLineIndex].isCompleted = true;
+                State.multiLines[State.activeLineIndex].isCompleted = true;
                 trainNode.classList.remove('active');
                 playSound('success');
-                const allCompleted = State.step4Lines.every(line => line.isCompleted);
+                const allCompleted = State.multiLines.every(line => line.isCompleted);
                 if (allCompleted) {
                     finishStep();
                 } else {
@@ -1393,8 +1618,8 @@ function onPointerUp(e) {
     State.isDragging = false;
 
     if (State.dragType === 'train' && !State.isStepCompleted && !State.waitingForTap) {
-        if (State.activeLineIndex >= 0 && State.step4Lines && State.step4Lines[State.activeLineIndex]) {
-            State.step4Lines[State.activeLineIndex].trainNode.classList.remove('active');
+        if (State.activeLineIndex >= 0 && State.multiLines && State.multiLines[State.activeLineIndex]) {
+            State.multiLines[State.activeLineIndex].trainNode.classList.remove('active');
         } else if (State.trainNode) {
             State.trainNode.classList.remove('active');
         }
@@ -1443,56 +1668,56 @@ function resetShapePos(node) {
 
 // --- 共通クリアオーバーレイ表示 ---
 function showClearOverlay(msg) {
-    // ステップ1〜5共通のステージ制用クリア画面
-    const total = State[`maxStep${State.step}Stage`];
-    const cur = State[`step${State.step}Stage`];
+    const c = State.currentCourse;
+    const total = State.maxStages[c];
+    const cur = State.currentStage;
     const allDone = (cur >= total);
 
+    // 最大到達進捗を更新
+    if (cur > State.progress[c]) {
+        State.progress[c] = cur;
+    }
+
     // 実績判定と保存処理
-    let newlyEarned = null; // 'first' | 'all' | 'complete'
+    let newlyEarned = null; // 'all' | 'complete'
     const ach = State.achievements;
 
-    // 1面クリア実績判定
-    if (cur === 1 && !ach[`step${State.step}First`]) {
-        ach[`step${State.step}First`] = true;
-        newlyEarned = 'first';
-    }
-    // ステップ全部クリア実績判定
-    if (allDone && !ach[`step${State.step}All`]) {
-        ach[`step${State.step}All`] = true;
+    // コース全部クリア実績判定
+    if (allDone && !ach[`course${c}Clear`]) {
+        ach[`course${c}Clear`] = true;
         newlyEarned = 'all';
     }
 
     // 全ステップ完全制覇の判定
-    const isCompleteAll = [1, 2, 3, 4, 5].every(s => ach[`step${s}All`]);
+    const isCompleteAll = ach.courseAClear && ach.courseBClear && ach.courseCClear;
     if (isCompleteAll && !ach.completeAll) {
         ach.completeAll = true;
         newlyEarned = 'complete';
     }
 
+    saveProgress();
+
     if (newlyEarned) {
-        saveAchievements();
         playSound('fanfare');
     }
 
     roundIndicator.textContent = `${cur} / ${total}`;
 
     if (allDone) {
-        clearMessage.textContent = 'ぜんぶクリア！すごい！';
-        clearProgress.textContent = `${total}つのコースを 全部できたよ！`;
-        btnContinue.textContent = 'トップにもどる >';
+        clearMessage.textContent = 'コースクリア！すごい！';
+        clearProgress.textContent = `コース${c} を 全部できたよ！`;
+        btnContinue.textContent = 'ステージをえらぶ >';
 
-        let okojoMsg = 'ぜんぶ クリア！ ほんとうに すごいね！ はなまる だよ！';
+        let okojoMsg = `コース${c} クリア！ ほんとうに すごいね！ はなまる だよ！`;
         if (newlyEarned === 'complete') okojoMsg = 'ついに レールマスター だね！ おめでとう！！ ぜんぶのメダルがあつまったよ！';
-        else if (newlyEarned === 'all') okojoMsg = 'ステップせいは メダル を ゲットしたよ！ すごい！';
+        else if (newlyEarned === 'all') okojoMsg = 'コースクリア メダル を ゲットしたよ！ すごい！';
         setOkojoText(okojoMsg);
     } else {
         clearMessage.textContent = 'クリア！';
         clearProgress.textContent = `${cur} / ${total} くりあ！`;
-        btnContinue.textContent = 'つぎのコースへ ▶';
+        btnContinue.textContent = 'つぎのステージへ ▶';
 
         let okojoMsg = 'クリア！ すごいね！ よくできたよ！';
-        if (newlyEarned === 'first') okojoMsg = 'ちょうせんメダル を ゲットしたよ！ このちょうしで がんばれ！';
         setOkojoText(okojoMsg);
     }
 
@@ -1500,7 +1725,7 @@ function showClearOverlay(msg) {
 }
 
 // --- Finishes ---
-function finishStep(customMsg = 'やったね！えきに ついたよ！', playTrainAnim = false) {
+function finishStep(customMsg = 'やったね！えきに ついたよ！') {
     State.isDragging = false;
     State.isStepCompleted = true;
     if (State.trainNode) {
@@ -1509,8 +1734,6 @@ function finishStep(customMsg = 'やったね！えきに ついたよ！', play
     }
     playSound('success');
     setOkojoText(customMsg);
-
-    // 全ステップ共通：回数設定に基づいてオーバーレイを表示
     showClearOverlay(customMsg);
 }
 
@@ -1521,10 +1744,11 @@ function finishStep4(node) {
     document.querySelectorAll('.draggable-shape').forEach(n => {
         if (n !== node) { n.style.opacity = '0.2'; n.style.pointerEvents = 'none'; }
     });
-    const msg = (State.step === State.maxStep)
+    const c = State.currentCourse;
+    const msg = (State.currentStage >= State.maxStages[c])
         ? 'ぜんぶ クリア だよ！ すごい！ おめでとう！！'
         : 'だいせいかい！ ピタッと かさなったね！';
-    playSound(State.step === State.maxStep ? 'fanfare' : 'success');
+    playSound((State.currentStage >= State.maxStages[c]) ? 'fanfare' : 'success');
     showClearOverlay(msg);
 }
 
@@ -1532,13 +1756,12 @@ function finishStep4(node) {
 function renderAchievements() {
     const ach = State.achievements;
 
-    // 1. 各ステップカードへのメダル描画
-    const cards = document.querySelectorAll('.step-card');
+    // 1. 各コースカードへのメダル描画
+    const cards = document.querySelectorAll('.course-card');
     cards.forEach(card => {
-        const step = parseInt(card.dataset.step);
+        const course = card.dataset.course;
         let medalsHtml = '';
 
-        // まずコンテナがあるか確認、なければ追加
         let container = card.querySelector('.medal-container');
         if (!container) {
             container = document.createElement('div');
@@ -1546,13 +1769,9 @@ function renderAchievements() {
             card.appendChild(container);
         }
 
-        // 挑戦メダル (1面クリア)
-        if (ach[`step${step}First`]) {
-            medalsHtml += `<div class="medal medal-bronze" title="ちょうせんメダル">★</div>`;
-        }
         // 制覇メダル (全部クリア)
-        if (ach[`step${step}All`]) {
-            medalsHtml += `<div class="medal medal-silver" title="ステップせいは！">👑</div>`;
+        if (ach[`course${course}Clear`]) {
+            medalsHtml += `<div class="medal medal-silver" title="コースクリア！">👑</div>`;
         }
 
         container.innerHTML = medalsHtml;
@@ -1578,33 +1797,15 @@ function renderAchievementsScreen() {
     grid.innerHTML = '';
 
     const ach = State.achievements;
-    const stepNames = [
-        '<ruby>線<rt>せん</rt></ruby>を なぞろう',
-        '<ruby>曲線<rt>きょくせん</rt></ruby>を なぞろう',
-        'かどに きづこう',
-        'こうさを なぞろう',
-        'こうさを なぞろう②'
-    ];
+    const courseNames = {
+        'A': 'まっすぐコース',
+        'B': 'くねくねコース',
+        'C': 'ミックスコース'
+    };
 
-    // ステップ1〜5のメダルを順に生成
-    for (let i = 1; i <= 5; i++) {
-        // --- 挑戦メダル (1面クリア) ---
-        const firstEarned = ach[`step${i}First`];
-        const firstItem = document.createElement('div');
-        firstItem.className = `achievement-item ${firstEarned ? '' : 'locked'}`;
-        firstItem.innerHTML = `
-            <div class="achievement-icon ${firstEarned ? 'medal-bronze' : 'medal-locked'}">
-                ${firstEarned ? '★' : '?'}
-            </div>
-            <div class="achievement-info">
-                <div class="achievement-title">ステップ${i} ちょうせん</div>
-                <div class="achievement-desc">「${stepNames[i - 1]}」の 1<ruby>面<rt>めん</rt></ruby>を クリアしたよ</div>
-            </div>
-        `;
-        grid.appendChild(firstItem);
-
-        // --- 制覇メダル (全部クリア) ---
-        const allEarned = ach[`step${i}All`];
+    // コースA,B,Cのメダルを順に生成
+    ['A', 'B', 'C'].forEach(c => {
+        const allEarned = ach[`course${c}Clear`];
         const allItem = document.createElement('div');
         allItem.className = `achievement-item ${allEarned ? '' : 'locked'}`;
         allItem.innerHTML = `
@@ -1612,12 +1813,12 @@ function renderAchievementsScreen() {
                 ${allEarned ? '👑' : '?'}
             </div>
             <div class="achievement-info">
-                <div class="achievement-title">ステップ${i} せいは</div>
-                <div class="achievement-desc">「${stepNames[i - 1]}」の <ruby>全<rt>ぜん</rt></ruby>コースを クリアしたよ</div>
+                <div class="achievement-title">コース${c} クリア</div>
+                <div class="achievement-desc">「${courseNames[c]}」の <ruby>全<rt>ぜん</rt></ruby>ステージを クリアしたよ</div>
             </div>
         `;
         grid.appendChild(allItem);
-    }
+    });
 
     // --- コンプリートメダル ---
     const completeEarned = ach.completeAll;
@@ -1629,7 +1830,7 @@ function renderAchievementsScreen() {
         </div>
         <div class="achievement-info">
             <div class="achievement-title" style="color:#d84315;">レールマスター</div>
-            <div class="achievement-desc">すべての ステップの <ruby>全<rt>ぜん</rt></ruby>コースを クリアした <ruby>大天才<rt>だいてんさい</rt></ruby>！！</div>
+            <div class="achievement-desc">すべての コースの <ruby>全<rt>ぜん</rt></ruby>ステージを クリアした <ruby>大天才<rt>だいてんさい</rt></ruby>！！</div>
         </div>
     `;
     grid.appendChild(compItem);

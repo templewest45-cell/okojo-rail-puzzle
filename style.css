@@ -114,21 +114,19 @@ body {
     color: #777;
 }
 
-.step-cards {
+.course-cards {
     display: flex;
     gap: 14px;
     flex-wrap: wrap;
     justify-content: center;
 }
 
-.step-card {
+.course-card {
     background: linear-gradient(145deg, #ffffff 0%, #f5fff5 100%);
     border: 2px solid rgba(76, 175, 80, 0.15);
     border-radius: 22px;
     padding: 24px 16px 20px;
-    /* 余白を広げる */
     width: 160px;
-    /* 文字拡大に合わせて横幅を広げる */
     cursor: pointer;
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
     transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
@@ -139,11 +137,25 @@ body {
     position: relative;
 }
 
-.step-card:hover,
-.step-card:active {
+.course-card:hover,
+.course-card:active {
     transform: translateY(-5px) scale(1.05);
     box-shadow: 0 12px 32px rgba(76, 175, 80, 0.2);
     border-color: var(--primary-color);
+}
+
+.course-card.locked {
+    background: #f0f0f0;
+    border-color: #ccc;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+.course-card.locked:hover,
+.course-card.locked:active {
+    transform: none;
+    box-shadow: none;
 }
 
 .card-icon {
@@ -170,6 +182,96 @@ body {
     color: #555;
     display: inline-block;
     margin-top: 4px;
+}
+
+/* ============================
+   ステージ選択画面
+============================= */
+#screen-stage-select {
+    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+}
+
+#screen-stage-select header {
+    background: var(--primary-color);
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+.stage-scroll-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 20px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.stage-list {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    margin: auto 0;
+}
+
+.stage-item {
+    flex-shrink: 0;
+    width: 120px;
+    height: 120px;
+    background: white;
+    border-radius: 24px;
+    border: 3px solid var(--primary-color);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.stage-item:hover,
+.stage-item:active {
+    transform: scale(1.1);
+    box-shadow: 0 12px 24px rgba(76, 175, 80, 0.25);
+}
+
+.stage-item span.stage-num {
+    font-size: 2.5rem;
+    line-height: 1;
+    margin-bottom: 5px;
+}
+
+.stage-item.locked {
+    background: #e0e0e0;
+    border-color: #bdbdbd;
+    color: #9e9e9e;
+    cursor: not-allowed;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stage-item.locked:hover,
+.stage-item.locked:active {
+    transform: none;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stage-item.cleared::after {
+    content: '⭐';
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    font-size: 24px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 /* ============================

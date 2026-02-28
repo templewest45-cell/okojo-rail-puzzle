@@ -38,54 +38,49 @@
                 </div>
             </div>
 
-            <div class="step-cards">
-                <button class="step-card" data-step="1">
+            <div class="course-cards">
+                <button class="course-card" data-course="A">
                     <div class="card-icon">
                         <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
                             stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="8" y1="20" x2="32" y2="20" />
+                            <line x1="20" y1="5" x2="20" y2="35" />
                         </svg>
                     </div>
-                    <div class="card-label">ステップ 1<br><span><ruby>線<rt>せん</rt></ruby>を なぞろう</span></div>
+                    <div class="card-label">コースA<br><span>まっすぐ コース</span></div>
                 </button>
-                <button class="step-card" data-step="2">
+                <button class="course-card" data-course="B">
                     <div class="card-icon">
                         <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
                             stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M 8,20 Q 16,8 24,20 T 40,20" />
+                            <path d="M 10,30 C 10,10 30,10 30,30" />
                         </svg>
                     </div>
-                    <div class="card-label">ステップ 2<br><span><ruby>曲線<rt>きょくせん</rt></ruby>を なぞろう</span></div>
+                    <div class="card-label">コースB<br><span>くねくね コース</span></div>
                 </button>
-                <button class="step-card" data-step="3">
+                <button class="course-card locked" data-course="C" id="btn-course-c">
                     <div class="card-icon">
-                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M 8,10 L 8,30 L 32,30" />
-                            <polyline points="24,22 32,30 24,38" transform="translate(0,-8)" />
-                        </svg>
+                        <span style="font-size: 32px">🔒</span>
                     </div>
-                    <div class="card-label">ステップ 3<br><span>かどに きづこう</span></div>
+                    <div class="card-label">コースC<br><span>ミックス コース</span></div>
                 </button>
-                <button class="step-card" data-step="4">
-                    <div class="card-icon">
-                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M 20,20 C 35,5 35,35 20,20 C 5,5 5,35 20,20" />
-                        </svg>
-                    </div>
-                    <div class="card-label">ステップ 4<br><span>こうさを なぞろう</span></div>
-                </button>
-                <button class="step-card" data-step="5">
-                    <div class="card-icon">
-                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#4CAF50" stroke-width="3.5"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <!-- 星形のアイコン -->
-                            <polygon points="20,5 24,14 34,14 26,20 29,30 20,24 11,30 14,20 6,14 16,14" />
-                        </svg>
-                    </div>
-                    <div class="card-label">ステップ 5<br><span>こうさを なぞろう②</span></div>
-                </button>
+            </div>
+        </div>
+
+        <!-- ============================
+             ステージ選択画面
+        ============================= -->
+        <div id="screen-stage-select" class="screen">
+            <header>
+                <button id="btn-stage-back"
+                    style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 14px; border-radius: 50px; font-weight: bold; cursor: pointer;">⬅
+                    もどる</button>
+                <div id="stage-select-title" style="font-weight: bold; font-size: 1.2rem;">コースをえらんでね</div>
+                <div style="width: 80px;"></div> <!-- レイアウト調整用 -->
+            </header>
+            <div class="stage-scroll-wrapper">
+                <div id="stage-list" class="stage-list">
+                    <!-- JSで動的にステージアイコン(1, 2, 3...)を追加する -->
+                </div>
             </div>
         </div>
 
