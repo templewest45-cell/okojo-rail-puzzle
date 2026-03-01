@@ -1233,27 +1233,26 @@ function generateCourseCPath(stage) {
     else if (stage === 9) {
         const cx = center.x, cy = center.y;
         const w = 170 * scale, h = 260 * scale;
-        // 上の頂点から時計回りに8字をトレース
+        // 上の頂点から左下へS字を描いて交差する、一般的な「8」の書き順
         const fwd = `M ${cx},${cy - h} ` +
-            `C ${cx + w},${cy - h} ${cx + w},${cy} ${cx},${cy} ` +  // 上ループ右下半
-            `C ${cx + w},${cy} ${cx + w},${cy + h} ${cx},${cy + h} ` + // 下ループ右下半
-            `C ${cx - w},${cy + h} ${cx - w},${cy} ${cx},${cy} ` +  // 下ループ左上半
-            `C ${cx - w},${cy} ${cx - w},${cy - h} ${cx},${cy - h}`; // 上ループ左上半
+            `C ${cx - w},${cy - h} ${cx - w},${cy} ${cx},${cy} ` +  // 上ループ左側
+            `C ${cx + w},${cy} ${cx + w},${cy + h} ${cx},${cy + h} ` + // 下ループ右側
+            `C ${cx - w},${cy + h} ${cx - w},${cy} ${cx},${cy} ` +  // 下ループ左側
+            `C ${cx + w},${cy} ${cx + w},${cy - h} ${cx},${cy - h}`; // 上ループ右側
         const rev = `M ${cx},${cy - h} ` +
-            `C ${cx - w},${cy - h} ${cx - w},${cy} ${cx},${cy} ` +
-            `C ${cx - w},${cy} ${cx - w},${cy + h} ${cx},${cy + h} ` +
-            `C ${cx + w},${cy + h} ${cx + w},${cy} ${cx},${cy} ` +
-            `C ${cx + w},${cy} ${cx + w},${cy - h} ${cx},${cy - h}`;
-        return { type: 'multi', lines: [{ d: fwd, reverseD: rev }] };
+            `C ${cx + w},${cy - h} ${cx + w},${cy} ${cx},${cy} ` +  // 上ループ右側
+            `C ${cx - w},${cy} ${cx - w},${cy + h} ${cx},${cy + h} ` + // 下ループ左側
+            `C ${cx + w},${cy + h} ${cx + w},${cy} ${cx},${cy} ` +  // 下ループ右側
+            `C ${cx - w},${cy} ${cx - w},${cy - h} ${cx},${cy - h}`; // 上ループ左側
+        return { type: 'multi', lines: [{ d: fwd }] };
     }
     // C-10: 横の８の字/∞ (交差点スタート)
     else if (stage === 10) {
         const cx = center.x, cy = center.y;
         const w = 350 * scale, h = 320 * scale;
-        // 交差点(中央)から右ループ→左ループの順で∞をトレース
+        // 交差点(中央)から右ループ→左ループの順で∞をトレース (右上へ向かう)
         const fwd = `M ${cx},${cy} C ${cx + w},${cy - h} ${cx + w},${cy + h} ${cx},${cy} C ${cx - w},${cy - h} ${cx - w},${cy + h} ${cx},${cy}`;
-        const rev = `M ${cx},${cy} C ${cx - w},${cy + h} ${cx - w},${cy - h} ${cx},${cy} C ${cx + w},${cy + h} ${cx + w},${cy - h} ${cx},${cy}`;
-        return { type: 'multi', lines: [{ d: fwd, reverseD: rev }] };
+        return { type: 'multi', lines: [{ d: fwd }] };
     }
 
 
@@ -1302,7 +1301,8 @@ function initCourseC(stage) {
 
             // 逆方向可能な面(円など)は矢印を描画しないことでどちらでも描けるように見せる
             if (!reverseData) {
-                drawDirectionArrows(pathNode, 4, color, index);
+                const arrowCount = Math.max(4, Math.floor(pathLength / 300));
+                drawDirectionArrows(pathNode, arrowCount, color, index);
             }
             const trainNode = drawTrain(startPoint.x, startPoint.y, color);
             lineObj.trainNode = trainNode;
@@ -1325,7 +1325,8 @@ function initCourseC(stage) {
         drawStation(startPoint.x, startPoint.y, mainColor);
         drawStation(endPoint.x, endPoint.y, mainColor);
 
-        drawDirectionArrows(State.currentPathNode, 4, mainColor);
+        const arrowCount = Math.max(4, Math.floor(State.pathLength / 300));
+        drawDirectionArrows(State.currentPathNode, arrowCount, mainColor);
         adjustViewBoxToFitPath(State.currentPathNode);
 
         State.trainNode = drawTrain(startPoint.x, startPoint.y, mainColor);
