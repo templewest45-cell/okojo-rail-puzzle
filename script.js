@@ -1229,21 +1229,38 @@ function generateCourseCPath(stage) {
         const d2_ccw = `M ${cx2},${center.y - r2} A ${r2},${r2} 0 1,0 ${cx2},${center.y + r2} A ${r2},${r2} 0 1,0 ${cx2},${center.y - r2}`;
         return { type: 'multi', lines: [{ d: d1_cw, reverseD: d1_ccw }, { d: d2_cw, reverseD: d2_ccw }] };
     }
-    // C-9: 縦の８の字 (始点上)
+    // C-9: 縦の８の字 (始点右上)
     else if (stage === 9) {
         const cx = center.x, cy = center.y;
-        const w = 170 * scale, h = 260 * scale;
-        // 上の頂点から左下へS字を描いて交差する、一般的な「8」の書き順
-        const fwd = `M ${cx},${cy - h} ` +
-            `C ${cx - w},${cy - h} ${cx - w},${cy} ${cx},${cy} ` +  // 上ループ左側
-            `C ${cx + w},${cy} ${cx + w},${cy + h} ${cx},${cy + h} ` + // 下ループ右側
-            `C ${cx - w},${cy + h} ${cx - w},${cy} ${cx},${cy} ` +  // 下ループ左側
-            `C ${cx + w},${cy} ${cx + w},${cy - h} ${cx},${cy - h}`; // 上ループ右側
-        const rev = `M ${cx},${cy - h} ` +
-            `C ${cx + w},${cy - h} ${cx + w},${cy} ${cx},${cy} ` +  // 上ループ右側
-            `C ${cx - w},${cy} ${cx - w},${cy + h} ${cx},${cy + h} ` + // 下ループ左側
-            `C ${cx + w},${cy + h} ${cx + w},${cy} ${cx},${cy} ` +  // 下ループ右側
-            `C ${cx - w},${cy} ${cx - w},${cy - h} ${cx},${cy - h}`; // 上ループ左側
+        const w = 150 * scale, h = 240 * scale;
+
+        // 完璧で美しい「8の字 (数学的カプセル交差型)」
+        // 2つの完全な円を描き、斜め45度の直線で滑らかに繋ぐことで、絶対に形が崩れない純粋な丸みを作ります。
+        const R = 60 * scale; // 円の半径
+        const sq2 = Math.SQRT2;
+
+        // 中心(cx,cy)から見て、交差する直線が円と接する4つの接点の相対距離
+        const dX = R / sq2;
+        const dY = R / sq2;
+
+        // 各接点の絶対座標 (TR=右上, TL=左上, BR=右下, BL=左下)
+        const TR = { x: cx + dX, y: cy - dY };
+        const TL = { x: cx - dX, y: cy - dY };
+        const BR = { x: cx + dX, y: cy + dY };
+        const BL = { x: cx - dX, y: cy + dY };
+
+        // 始点はTR（上のループの右下 = 全体から見ると右上約2時方向）
+        // 左回り(反時計)に上の円を描き、交差点を真っ直ぐ抜け、右回り(時計)に下の円を描き、また真っ直ぐ戻る。
+        const fwd = `M ${TR.x},${TR.y} ` +
+            // 上ループ: TRから反時計回りで頂点を通ってTLへ描画 (270度分の完全な円弧)
+            `A ${R} ${R} 0 1 0 ${TL.x},${TL.y} ` +
+            // クロス直線1: TLから中央(cx,cy)を通り、右下のBRへ真っ直ぐ抜ける
+            `L ${BR.x},${BR.y} ` +
+            // 下ループ: BRから時計回りで底を通ってBLへ描画 (270度分の完全な円弧)
+            `A ${R} ${R} 0 1 1 ${BL.x},${BL.y} ` +
+            // クロス直線2: BLから中央(cx,cy)を通り、始点(右上)のTRへ真っ直ぐ戻る
+            `L ${TR.x},${TR.y}`;
+
         return { type: 'multi', lines: [{ d: fwd }] };
     }
     // C-10: 横の８の字/∞ (交差点スタート)
