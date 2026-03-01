@@ -109,11 +109,11 @@ const State = {
     multiLines: [],
     activeLineIndex: -1,
 
-    // 進捗管理用 (何面までクリアしたか)
+    // 進捗管理用 (個別にどの面をクリアしたか保持する配列)
     progress: {
-        'A': 0,
-        'B': 0,
-        'C': 0
+        'A': [],
+        'B': [],
+        'C': []
     },
 
     // 実績管理用 (メダル)
@@ -121,8 +121,12 @@ const State = {
         courseAClear: false,
         courseBClear: false,
         courseCClear: false,
+        courseCClear: false,
         completeAll: false
-    }
+    },
+
+    // 設定：未クリアステージをロックするか
+    lockUnclearedStages: false
 };
 
 // --- Progress & Achievements (LocalStorage) ---
@@ -131,8 +135,26 @@ function loadProgress() {
         const saved = localStorage.getItem('okojo_rail_progress_v2');
         if (saved) {
             const parsed = JSON.parse(saved);
-            State.progress = { ...State.progress, ...(parsed.progress || {}) };
+
+            // 下位互換性のため、数値形式の進行データを配列に変換して読み込む
+            if (parsed.progress) {
+                for (const course of ['A', 'B', 'C']) {
+                    if (typeof parsed.progress[course] === 'number') {
+                        const maxStageNum = parsed.progress[course];
+                        State.progress[course] = [];
+                        for (let i = 1; i <= maxStageNum; i++) {
+                            State.progress[course].push(i);
+                        }
+                    } else if (Array.isArray(parsed.progress[course])) {
+                        State.progress[course] = parsed.progress[course];
+                    }
+                }
+            }
+
             State.achievements = { ...State.achievements, ...(parsed.achievements || {}) };
+            if (typeof parsed.lockUnclearedStages !== 'undefined') {
+                State.lockUnclearedStages = parsed.lockUnclearedStages;
+            }
         }
     } catch (e) {
         console.error('Failed to load progress:', e);
@@ -143,7 +165,8 @@ function saveProgress() {
     try {
         const data = {
             progress: State.progress,
-            achievements: State.achievements
+            achievements: State.achievements,
+            lockUnclearedStages: State.lockUnclearedStages
         };
         localStorage.setItem('okojo_rail_progress_v2', JSON.stringify(data));
     } catch (e) {
@@ -185,10 +208,12 @@ function init() {
             initAudio();
             const course = card.dataset.course;
 
-            // コースCのロックチェック（AとBの進捗が5以上）
-            if (course === 'C') {
-                if (State.progress['A'] < 5 || State.progress['B'] < 5) {
-                    // ロックされている場合は何もしない（アラートを出してもよい）
+            // コースCのロックチェック（設定がオンで、かつAとBのそれぞれ[1〜5]がすべてクリアされている場合のみアンロック、それ以外はロック）
+            if (course === 'C' && State.lockUnclearedStages) {
+                const isAClearedTo5 = [1, 2, 3, 4, 5].every(stg => State.progress['A'].includes(stg));
+                const isBClearedTo5 = [1, 2, 3, 4, 5].every(stg => State.progress['B'].includes(stg));
+                if (!isAClearedTo5 || !isBClearedTo5) {
+                    // ロックされている場合は何もしない
                     return;
                 }
             }
@@ -227,6 +252,34 @@ function init() {
         settingsModal.classList.add('hidden');
     });
 
+    // データリセット機能
+    const btnResetData = document.getElementById('btn-reset-data');
+    if (btnResetData) {
+        btnResetData.addEventListener('click', () => {
+            if (confirm('これまで あつめた メダル や クリアの きろく が すべて きえます。\nほんとうに リセット しますか？')) {
+                // 進捗と実績をリセット
+                State.progress = { 'A': [], 'B': [], 'C': [] };
+                State.achievements = {
+                    courseAClear: false,
+                    courseBClear: false,
+                    courseCClear: false,
+                    completeAll: false
+                };
+                saveProgress();
+
+                // 現在の画面の再描画
+                if (State.currentCourse) {
+                    renderStageSelect(State.currentCourse);
+                }
+                updateCourseCLockUI();
+                renderAchievements(); // トップ画面のメダルや称号の描画を更新
+
+                alert('きろく を リセットしました！');
+                settingsModal.classList.add('hidden');
+            }
+        });
+    }
+
     // 駅の色パレット
     document.querySelectorAll('#palette-station .color-swatch').forEach(sw => {
         sw.addEventListener('click', () => {
@@ -236,13 +289,25 @@ function init() {
         });
     });
 
-    // 電車の色パレット
-    document.querySelectorAll('#palette-train .color-swatch').forEach(sw => {
-        sw.addEventListener('click', () => {
-            document.querySelectorAll('#palette-train .color-swatch').forEach(s => s.classList.remove('active'));
-            sw.classList.add('active');
-            document.documentElement.style.setProperty('--train-color', sw.dataset.color);
+    // ステージロック設定トグル機能
+    document.querySelectorAll('#lock-buttons .length-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#lock-buttons .length-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            State.lockUnclearedStages = (btn.dataset.lock === 'true');
+            saveProgress();
+            // トップやステージ選択にいる場合は再描画
+            if (State.currentCourse) {
+                renderStageSelect(State.currentCourse);
+            }
+            updateCourseCLockUI();
         });
+    });
+
+    // 初期状態のボタンスタイル適用
+    document.querySelectorAll('#lock-buttons .length-btn').forEach(btn => {
+        const isLockBtn = (btn.dataset.lock === 'true');
+        btn.classList.toggle('active', isLockBtn === State.lockUnclearedStages);
     });
 
     // クリアオーバーレイ：つづける
@@ -386,7 +451,11 @@ function adjustViewBoxToFitPath(pathNodes) {
 function updateCourseCLockUI() {
     const btnC = document.getElementById('btn-course-c');
     if (!btnC) return;
-    if (State.progress['A'] >= 5 && State.progress['B'] >= 5) {
+    const isAClearedTo5 = [1, 2, 3, 4, 5].every(stg => State.progress['A'].includes(stg));
+    const isBClearedTo5 = [1, 2, 3, 4, 5].every(stg => State.progress['B'].includes(stg));
+
+    // ロック設定がオフ、またはAとB両方が1〜5までクリアされていればアンロック
+    if (!State.lockUnclearedStages || (isAClearedTo5 && isBClearedTo5)) {
         btnC.classList.remove('locked');
         btnC.innerHTML = `
             <div class="card-icon">
@@ -418,15 +487,15 @@ function renderStageSelect(course) {
 
     list.innerHTML = '';
     const max = State.maxStages[course];
-    const cleared = State.progress[course] || 0;
+    const clearedList = State.progress[course] || [];
 
     for (let i = 1; i <= max; i++) {
         const item = document.createElement('div');
         item.className = 'stage-item';
 
-        // 1つ先のステージまではプレイ可能
-        const isLocked = i > cleared + 1;
-        const isCleared = i <= cleared;
+        // 設定がオンなら未クリアステージをロックする (ただしステージ1は常にアンロック、または一つ前のステージがクリアされていればアンロック)
+        const isLocked = State.lockUnclearedStages && i > 1 && !clearedList.includes(i - 1) && !clearedList.includes(i);
+        const isCleared = clearedList.includes(i);
 
         if (isLocked) {
             item.classList.add('locked');
@@ -672,7 +741,7 @@ function drawTrain(x, y, color = null) {
     rect.setAttribute('x', -45); rect.setAttribute('y', -30);
     rect.setAttribute('width', 90); rect.setAttribute('height', 60);
     rect.setAttribute('rx', 14);
-    rect.setAttribute('fill', color ? color : 'var(--train-color)');
+    rect.setAttribute('fill', color ? color : '#F44336'); // デフォルトは赤に固定
     g.appendChild(rect);
 
     // 前面パネル（色分け）
@@ -1673,17 +1742,22 @@ function showClearOverlay(msg) {
     const cur = State.currentStage;
     const allDone = (cur >= total);
 
-    // 最大到達進捗を更新
-    if (cur > State.progress[c]) {
-        State.progress[c] = cur;
+    // 個別ステージのクリアを記録 (重複を防いで追加)
+    if (!State.progress[c].includes(cur)) {
+        State.progress[c].push(cur);
+        // 見やすくソートしておく
+        State.progress[c].sort((a, b) => a - b);
     }
+
+    // コース全クリアの判定 (クリアしたステージの数が最大ステージ数に達しているか)
+    const isCourseAllCleared = State.progress[c].length >= total;
 
     // 実績判定と保存処理
     let newlyEarned = null; // 'all' | 'complete'
     const ach = State.achievements;
 
     // コース全部クリア実績判定
-    if (allDone && !ach[`course${c}Clear`]) {
+    if (isCourseAllCleared && !ach[`course${c}Clear`]) {
         ach[`course${c}Clear`] = true;
         newlyEarned = 'all';
     }
@@ -1786,6 +1860,8 @@ function renderAchievements() {
             completeMedal.className = 'medal-complete';
             completeMedal.innerHTML = '✨🏆✨<br><span style="font-size: 0.8rem">レールマスター</span>';
             headerTitle.appendChild(completeMedal);
+        } else if (!ach.completeAll && completeMedal) {
+            completeMedal.remove(); // リセット時に称号も削除する
         }
     }
 }

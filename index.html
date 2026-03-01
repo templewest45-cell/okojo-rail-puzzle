@@ -119,21 +119,18 @@
                 </div>
 
                 <div class="settings-section">
-                    <label class="settings-section-label">🚃 でんしゃ の いろ</label>
-                    <div class="color-palette" id="palette-train">
-                        <button class="color-swatch active" data-color="#F44336" style="background:#F44336"
-                            title="あか"></button>
-                        <button class="color-swatch" data-color="#2196F3" style="background:#2196F3"
-                            title="あお"></button>
-                        <button class="color-swatch" data-color="#4CAF50" style="background:#4CAF50"
-                            title="みどり"></button>
-                        <button class="color-swatch" data-color="#FF9800" style="background:#FF9800"
-                            title="オレンジ"></button>
-                        <button class="color-swatch" data-color="#9C27B0" style="background:#9C27B0"
-                            title="むらさき"></button>
-                        <button class="color-swatch" data-color="#FFD600" style="background:#FFD600"
-                            title="きいろ"></button>
+                    <label class="settings-section-label">🔒 クリアまえの ステージを ロックする</label>
+                    <div class="round-buttons" id="lock-buttons">
+                        <button class="length-btn" data-lock="true">する</button>
+                        <button class="length-btn active" data-lock="false">しない</button>
                     </div>
+                </div>
+
+                <div class="settings-section"
+                    style="border-top: 1px dashed #ccc; margin-top: 15px; padding-top: 20px; text-align: center;">
+                    <button id="btn-reset-data"
+                        style="background:#F44336; color:white; border:none; padding:10px 20px; border-radius:50px; font-weight:bold; font-size:1rem; cursor:pointer;">⚠️
+                        じっせき・すすみを リセット</button>
                 </div>
 
                 <button id="btn-settings-close" class="settings-close-btn">とじる</button>
