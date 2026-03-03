@@ -58,6 +58,29 @@ function playSound(type) {
     }
 }
 
+// --- Global Event Prevention ---
+// 右クリックメニュー（コンテキストメニュー）を禁止
+document.addEventListener('contextmenu', e => {
+    e.preventDefault();
+});
+
+// スマホ等での予期せぬスクロールやスワイプ（バウンス）を防止
+document.addEventListener('touchmove', e => {
+    // スクロールが必要な特定の要素（ステージ選択の横スクロール、設定画面の縦スクロールなど）上でのスワイプは許可
+    const path = e.composedPath();
+    const isScrollable = path.some(el => {
+        return el.classList && (
+            el.classList.contains('stage-scroll-wrapper') ||
+            el.classList.contains('settings-card') ||
+            el.id === 'screen-top' // トップ画面で要素があふれた場合
+        );
+    });
+
+    if (!isScrollable) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
 // --- Screen Management ---
 const screenTop = document.getElementById('screen-top');
 const screenGame = document.getElementById('screen-game');
@@ -91,6 +114,7 @@ const State = {
     initialAngle: 0,
     lastTrainDragPt: null,
     trailPath: null,
+    activePointerId: undefined, // パームリジェクション用（ドラッグ中のポインターを固定）
 
     // 共通設定
     railLength: 2,
@@ -787,12 +811,15 @@ function drawTrain(x, y, color = null) {
 function setupTrainDrag(node) {
     node.addEventListener('pointerdown', e => {
         if (State.isStepCompleted || State.waitingForTap) return;
+        if (State.isDragging && State.activePointerId !== undefined) return;
+
         e.preventDefault();
         e.stopPropagation();
         initAudio();
         State.isDragging = true;
         State.dragType = 'train';
         State.activeLineIndex = -1; // 複数路線でない場合は-1
+        State.activePointerId = e.pointerId;
         node.setPointerCapture(e.pointerId);
         State.lastTrainDragPt = getSVGPoint(e);
         node.classList.add('active');
@@ -803,6 +830,7 @@ function setupMultiTrainDrag(node, lineIndex) {
     node.addEventListener('pointerdown', e => {
         if (State.isStepCompleted || State.waitingForTap) return;
         if (State.multiLines[lineIndex] && State.multiLines[lineIndex].isCompleted) return;
+        if (State.isDragging && State.activePointerId !== undefined) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -810,6 +838,7 @@ function setupMultiTrainDrag(node, lineIndex) {
         State.isDragging = true;
         State.dragType = 'train';
         State.activeLineIndex = lineIndex;
+        State.activePointerId = e.pointerId;
         node.setPointerCapture(e.pointerId);
         State.lastTrainDragPt = getSVGPoint(e);
         node.classList.add('active');
@@ -1422,6 +1451,8 @@ function parseTransform(transformStr) {
 
 function startShapeDrag(e) {
     if (State.isStepCompleted) return;
+    if (State.isDragging && State.activePointerId !== undefined) return;
+
     initAudio();
     const node = e.currentTarget;
     const pt = getSVGPoint(e);
@@ -1429,6 +1460,7 @@ function startShapeDrag(e) {
     const isRotateHandle = e.target.classList.contains('rotate-handle');
 
     State.isDragging = true;
+    State.activePointerId = e.pointerId;
     State.draggedShape = node;
     layerActive.appendChild(node);
 
@@ -1495,6 +1527,8 @@ function showCornerPrompt(stopObj) {
 
 function onPointerMove(e) {
     if (!State.isDragging) return;
+    if (State.activePointerId !== undefined && e.pointerId !== State.activePointerId) return;
+
     const pt = getSVGPoint(e);
 
     // Train — デルタ投影方式
@@ -1702,7 +1736,10 @@ function onPointerMove(e) {
 
 function onPointerUp(e) {
     if (!State.isDragging) return;
+    if (State.activePointerId !== undefined && e.pointerId !== State.activePointerId) return;
+
     State.isDragging = false;
+    State.activePointerId = undefined;
 
     if (State.dragType === 'train' && !State.isStepCompleted && !State.waitingForTap) {
         if (State.activeLineIndex >= 0 && State.multiLines && State.multiLines[State.activeLineIndex]) {

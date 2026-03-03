@@ -13,6 +13,9 @@
 * {
     box-sizing: border-box;
     user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    /* iOS Safari等の長押しメニューを禁止 */
     /* touch-action: none; はドラッグ領域(SVG)のみに適用させるため削除 */
 }
 
@@ -27,6 +30,8 @@ body {
     justify-content: center;
     align-items: center;
     overflow: hidden;
+    overscroll-behavior: none;
+    /* バウンス・引っ張り更新をOSレベルで禁止 */
 }
 
 #app-container {
